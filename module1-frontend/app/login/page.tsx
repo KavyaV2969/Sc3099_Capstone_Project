@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { StorageKeys, setItem } from "@/lib/storage";
+import { Card } from "@/components/ui/Card";
 import Link from "next/link";
 
 export default function LoginPage() {
@@ -32,45 +33,45 @@ export default function LoginPage() {
     }
 
     return (
-        <div className="login-container">
-            <div className="login-card">
-                <h1>Welcome Back!</h1>
+        <Card>
+            <h1 className="text-2xl font-bold mb-6">Welcome Back!</h1>
 
-                {error && <div className="message-error">{error}</div>}
+            {error && <div className="alert-error">{error}</div>}
 
-                <form onSubmit={handleSubmit}>
-                    <div className="form-field">
-                        <label htmlFor="email">Email</label>
-                        <input
-                            id="email"
-                            type="email"
-                            placeholder="yourname@e.ntu.edu.sg"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            required
-                        />
-                    </div>
-                    <div className="form-field">
-                        <label htmlFor="password">Password</label>
-                        <input
-                            id="password"
-                            type="password"
-                            placeholder="********"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            required
-                        />
-                    </div>
-
-                    <button type="submit" className="btn-primary" disabled={isSubmitting}>
-                        {isSubmitting ? "Logging in...":"Log In"}
-                    </button>
-                </form>
-
-                <div className="login-footer">
-                    Don&apos;t have an account? <Link href="/register">Sign up</Link>
+            <form onSubmit={handleSubmit}>
+                <div className="mb-3">
+                    <label htmlFor="email" className="field-label">Email</label>
+                    <input
+                        id="email"
+                        type="email"
+                        placeholder="yourname@e.ntu.edu.sg"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        required
+                        className="input-field"
+                    />
                 </div>
+                <div className="mb-4">
+                    <label htmlFor="password" className="field-label">Password</label>
+                    <input
+                        id="password"
+                        type="password"
+                        placeholder="********"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
+                        className="input-field"
+                    />
+                </div>
+
+                <button type="submit" className="btn-primary" disabled={isSubmitting}>
+                    {isSubmitting ? "Logging in..." : "Log In"}
+                </button>
+            </form>
+
+            <div className="text-sm text-gray-600 mt-4 text-center">
+            Don&apos;t have an account? <Link href="/register" className="text-blue-600 underline">Sign up</Link>
             </div>
-        </div>
+        </Card>
     );
 }
