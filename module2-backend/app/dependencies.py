@@ -7,7 +7,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import User
+from app.models import Course, CourseTA, User
 from app.rate_limit import enforce_user_api_limit
 from app.schemas import TokenType, UserRole
 from app.security import InvalidTokenError, decode_token
@@ -45,3 +45,20 @@ def require_roles(*allowed_roles: UserRole) -> Callable[..., User]:
         return current_user
 
     return role_guard
+
+
+def get_course_or_404(database: Session, course_id: str) -> Course:
+    course = database.get(Course, course_id)
+    if course is None:
+        raise HTTPException(status_code=404, detail="course not found")
+    return course
+
+
+def require_course_access(
+    database: Session, course: Course, user: User, *, allow_ta: bool = False
+) -> None:
+    if user.role == "admin" or (user.role == "instructor" and course.instructor_id == user.id):
+        return
+    if allow_ta and user.role == "ta" and database.get(CourseTA, (course.id, user.id)):
+        return
+    raise HTTPException(status_code=403, detail="insufficient course permissions")
