@@ -1,4 +1,4 @@
-"""SAIV Backend API Week 2 authentication service."""
+"""SAIV Backend API authentication and core attendance service."""
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import get_settings
 from app.db import database_is_healthy
 from app.rate_limit import redis_is_healthy
-from app.routers import admin, audit, auth, users
+from app.routers import admin, audit, auth, checkins, courses, enrollments, sessions, users
 
 settings = get_settings()
 
@@ -29,6 +29,10 @@ app.include_router(auth.router, prefix=settings.api_v1_prefix)
 app.include_router(users.router, prefix=settings.api_v1_prefix)
 app.include_router(admin.router, prefix=settings.api_v1_prefix)
 app.include_router(audit.router, prefix=settings.api_v1_prefix)
+app.include_router(courses.router, prefix=settings.api_v1_prefix)
+app.include_router(enrollments.router, prefix=settings.api_v1_prefix)
+app.include_router(sessions.router, prefix=settings.api_v1_prefix)
+app.include_router(checkins.router, prefix=settings.api_v1_prefix)
 
 
 @app.get("/health", tags=["health"])
