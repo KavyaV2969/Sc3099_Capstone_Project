@@ -14,3 +14,14 @@ export interface Session {
   require_liveness_check: boolean;
   require_face_match: boolean;
 }
+
+export interface Enrollment {
+  id: string;
+  course_id: string;
+  course_code: string;
+  course_name: string;
+  semester: string;
+  instructor_name: string;
+  is_active: boolean;
+  enrolled_at: string;
+}
