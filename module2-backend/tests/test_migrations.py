@@ -7,7 +7,7 @@ from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.config import Config
 from alembic.migration import MigrationContext
-from sqlalchemy import create_engine, inspect
+from sqlalchemy import MetaData, Table, create_engine, inspect, select
 
 from app import config as app_config
 from app.models import Base
@@ -25,9 +25,17 @@ def test_migration_upgrade_matches_models_and_downgrades(tmp_path, monkeypatch):
     url = f"sqlite:///{(tmp_path / 'migration.db').as_posix()}"
     monkeypatch.setattr(app_config, "get_settings", lambda: SimpleNamespace(database_url=url))
     config = migration_config()
-    command.upgrade(config, "head")
+    command.upgrade(config, "20260908_0002")
     engine = create_engine(url)
+    # Existing accounts receive zero failures when the lockout migration is applied.
+    with engine.begin() as connection:
+        users = Table("users", MetaData(), autoload_with=connection)
+        connection.execute(users.insert().values(id="existing-user", email="existing@example.com",
+                                                 full_name="Existing", hashed_password="unused"))
+    command.upgrade(config, "head")
     with engine.connect() as connection:
+        users = Table("users", MetaData(), autoload_with=connection)
+        assert connection.scalar(select(users.c.failed_login_attempts)) == 0
         assert compare_metadata(MigrationContext.configure(connection), Base.metadata) == []
         assert set(inspect(connection).get_table_names()) == set(Base.metadata.tables) | {"alembic_version"}
     command.downgrade(config, "20260825_0001")

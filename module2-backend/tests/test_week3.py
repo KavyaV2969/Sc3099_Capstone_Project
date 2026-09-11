@@ -47,11 +47,12 @@ def api(monkeypatch):
     with TestClient(app) as client:
         class API:
             def request(self, method, path, role="instructor", **kwargs):
-                headers = {}
+                headers = {"X-Forwarded-For": "127.0.0.1"}
                 if role:
                     user = users[role]
                     token = create_access_token(user.id, user.email, UserRole(user.role))
                     headers["Authorization"] = f"Bearer {token}"
+                headers.update(kwargs.pop("headers", {}))
                 return client.request(method, "/api/v1" + path, headers=headers, **kwargs)
         api = API()
         api.users, api.database = users, factory
@@ -391,3 +392,102 @@ def test_checkin_window_includes_exact_boundaries(api, ready, boundary, monkeypa
         now = as_utc(getattr(database.get(Session, ready["id"]), boundary))
     monkeypatch.setattr(checkins, "utc_now", lambda: now)
     assert api.request("POST", "/checkins/", "student", json=checkin_payload(ready)).status_code == 201
+
+
+@pytest.fixture
+def login_user(api, monkeypatch):
+    from app.routers import auth
+    from app.security import hash_password
+    monkeypatch.setattr(auth, "enforce_login_limit", lambda _: None)
+    password = "valid-password-123"
+    password_hash = hash_password(password)
+    with api.database() as database:
+        for role in ("student", "other_student"):
+            database.get(User, api.users[role].id).hashed_password = password_hash
+        database.commit()
+    return {"email": api.users["student"].email, "password": password}
+
+
+def test_tenth_failure_blocks_account_across_ips_and_correct_password(api, login_user):
+    wrong = {**login_user, "password": "wrong-password"}
+    for attempt in range(1, 11):
+        response = api.request("POST", "/auth/login", None, json=wrong,
+                               headers={"X-Forwarded-For": f"10.0.0.{attempt}"})
+        assert response.status_code == (429 if attempt == 10 else 401)
+    assert api.request("POST", "/auth/login", None, json=login_user).status_code == 429
+    assert api.request("POST", "/auth/login", None, json={**login_user, "email": login_user["email"].upper()}).status_code == 429
+    with api.database() as database:
+        user = database.get(User, api.users["student"].id)
+        assert user.failed_login_attempts == 10
+        assert user.is_active is True  # Login blocking is separate from account deactivation.
+
+
+def test_success_resets_failures_and_other_accounts_are_not_blocked(api, login_user):
+    wrong = {**login_user, "password": "wrong-password"}
+    for _ in range(9):
+        assert api.request("POST", "/auth/login", None, json=wrong).status_code == 401
+    assert api.request("POST", "/auth/login", None, json=login_user).status_code == 200
+    with api.database() as database:
+        assert database.get(User, api.users["student"].id).failed_login_attempts == 0
+    for _ in range(9):
+        assert api.request("POST", "/auth/login", None, json=wrong).status_code == 401
+    assert api.request("POST", "/auth/login", None, json=wrong).status_code == 429
+    other = {**login_user, "email": api.users["other_student"].email}
+    assert api.request("POST", "/auth/login", None, json=other).status_code == 200
+
+
+def test_admin_activation_unblocks_login(api, login_user):
+    with api.database() as database:
+        database.get(User, api.users["student"].id).failed_login_attempts = 10
+        database.commit()
+    path = f"/admin/users/{api.users['student'].id}/activate"
+    assert api.request("PATCH", path, "instructor").status_code == 403
+    assert api.request("POST", "/auth/login", None, json=login_user).status_code == 429
+    assert api.request("PATCH", path, "admin").status_code == 200
+    assert api.request("POST", "/auth/login", None, json=login_user).status_code == 200
+
+
+@pytest.mark.parametrize("coordinates", [(40.7128, -74.0060), (1.46, 103.75)])
+def test_foreign_gps_rejected_even_for_matching_venue_and_local_ip(api, ready, coordinates):
+    latitude, longitude = coordinates
+    with api.database() as database:
+        row = database.get(Session, ready["id"])
+        row.venue_latitude, row.venue_longitude = coordinates
+        database.commit()
+    response = api.request("POST", "/checkins/", "student",
+                           json=checkin_payload(ready, latitude=latitude, longitude=longitude))
+    assert response.status_code == 403
+    with api.database() as database:
+        assert database.scalar(select(func.count(Checkin.id))) == 0
+
+
+@pytest.mark.parametrize("forwarded,country,expected", [
+    ("8.8.8.8, 10.0.0.1", "US", 403),
+    ("8.8.8.8, 10.0.0.1", "SG", 201),
+    ("192.168.1.2, 8.8.8.8", None, 201),
+    ("::1", None, 201),
+    ("not-an-ip", None, 403),
+])
+def test_checkin_uses_first_forwarded_ip(api, ready, monkeypatch, forwarded, country, expected):
+    from types import SimpleNamespace
+    from app.utils import geolocation
+    def cached_country(key):
+        assert country is not None, "local/invalid addresses must not trigger a lookup"
+        assert key == "geo:country:8.8.8.8"
+        return country
+    monkeypatch.setattr(geolocation, "get_redis_client", lambda: SimpleNamespace(get=cached_country))
+    response = api.request("POST", "/checkins/", "student", json=checkin_payload(ready),
+                           headers={"X-Forwarded-For": forwarded})
+    assert response.status_code == expected
+
+
+def test_lookup_failure_does_not_create_an_approved_checkin(api, ready, monkeypatch):
+    from app.routers import checkins
+    from fastapi import HTTPException
+    def unavailable(_):
+        raise HTTPException(status_code=503, detail="IP country lookup unavailable")
+    monkeypatch.setattr(checkins, "ip_is_in_singapore", unavailable)
+    response = api.request("POST", "/checkins/", "student", json=checkin_payload(ready))
+    assert response.status_code == 503
+    with api.database() as database:
+        assert database.scalar(select(func.count(Checkin.id))) == 0

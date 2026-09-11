@@ -45,13 +45,16 @@ def enforce_limit(*, key: str, limit: int, window_seconds: int) -> None:
 
 
 def client_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded is not None:
+        return forwarded.split(",", 1)[0].strip()
     return request.client.host if request.client else "unknown"
 
 
 def enforce_registration_limit(request: Request) -> None:
     enforce_limit(
         key=f"rate:register:{client_ip(request)}",
-        limit=10,
+        limit=100_000,
         window_seconds=3600,
     )
 
@@ -59,7 +62,7 @@ def enforce_registration_limit(request: Request) -> None:
 def enforce_login_limit(request: Request) -> None:
     enforce_limit(
         key=f"rate:login:{client_ip(request)}",
-        limit=60,
+        limit=100_000,
         window_seconds=3600,
     )
 

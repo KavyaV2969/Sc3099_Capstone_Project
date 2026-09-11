@@ -70,16 +70,25 @@ def login(
 ) -> LoginResponse:
     """Verify credentials and issue a one-hour access and seven-day refresh token."""
     enforce_login_limit(request)
-    user = database.scalar(select(User).where(User.email == payload.email))
+    # Serialize attempts for this account, including attempts from different IPs.
+    user = database.scalar(select(User).where(User.email == payload.email).with_for_update())
+    if user is not None and user.failed_login_attempts >= 10:
+        raise HTTPException(status_code=429, detail="account is blocked; contact an administrator")
     if user is None or not verify_password(payload.password, user.hashed_password):
+        if user is not None:
+            user.failed_login_attempts += 1
+        blocked = user is not None and user.failed_login_attempts >= 10
         write_audit_log(
             database,
             request,
             action="login_failed",
-            details={"email": payload.email, "reason": "invalid_credentials"},
+            user_id=user.id if user else None,
+            details={"email": payload.email, "reason": "account_blocked" if blocked else "invalid_credentials"},
             success=False,
         )
         database.commit()
+        if blocked:
+            raise HTTPException(status_code=429, detail="account is blocked; contact an administrator")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid credentials")
     if not user.is_active:
         write_audit_log(
@@ -93,6 +102,7 @@ def login(
         database.commit()
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="account is disabled")
 
+    user.failed_login_attempts = 0
     user.last_login_at = datetime.now(timezone.utc)
     write_audit_log(database, request, action="login_success", user_id=user.id)
     database.commit()

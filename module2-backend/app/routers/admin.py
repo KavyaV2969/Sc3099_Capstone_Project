@@ -1,6 +1,7 @@
 """Minimum administration endpoints required for Week 2 account management."""
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.audit import write_audit_log
@@ -19,10 +20,12 @@ def _set_account_status(
     request: Request,
     database: Session,
 ) -> AdminActionResponse:
-    user = database.get(User, user_id)
+    user = database.scalar(select(User).where(User.id == user_id).with_for_update())
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user not found")
     user.is_active = active
+    if active:
+        user.failed_login_attempts = 0
     write_audit_log(
         database,
         request,

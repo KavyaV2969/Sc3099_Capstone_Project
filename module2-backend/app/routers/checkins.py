@@ -8,9 +8,10 @@ from app.audit import write_audit_log
 from app.db import get_db
 from app.dependencies import get_course_or_404, require_roles
 from app.models import Checkin, Enrollment, User, utc_now
+from app.rate_limit import client_ip
 from app.routers.sessions import get_session_or_404
 from app.schemas import CheckinCreate, CheckinResponse, UserRole, as_utc
-from app.utils.geolocation import haversine_distance
+from app.utils.geolocation import haversine_distance, ip_is_in_singapore, is_in_singapore
 
 router = APIRouter(prefix="/checkins", tags=["checkins"])
 
@@ -50,6 +51,10 @@ def create_checkin(payload: CheckinCreate, request: Request,
         reject(403, "geolocation consent is required")
     if (session.require_liveness_check or session.require_face_match) and not current_user.camera_consent:
         reject(403, "camera consent is required")
+    if not is_in_singapore(payload.latitude, payload.longitude):
+        reject(403, "check-ins must be within Singapore")
+    if not ip_is_in_singapore(client_ip(request)):
+        reject(403, "check-ins require a Singapore or local IP address")
     distance = haversine_distance(payload.latitude, payload.longitude,
                                   session.venue_latitude, session.venue_longitude)
     if distance <= session.geofence_radius_meters:

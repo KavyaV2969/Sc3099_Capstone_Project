@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, Float, ForeignKey, Index, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -32,6 +32,7 @@ class User(Base):
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(20), nullable=False, default="student")
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    failed_login_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     camera_consent: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     geolocation_consent: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     face_enrolled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
