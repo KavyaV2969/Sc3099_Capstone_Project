@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.audit import write_audit_log
 from app.db import get_db
-from app.dependencies import get_current_user, get_course_or_404, require_course_access, require_roles
+from app.dependencies import get_current_user, get_course_or_404, require_roles
 from app.models import Course, User
 from app.schemas import CourseCreate, CourseListResponse, CourseResponse, CourseUpdate, UserRole
 
@@ -17,7 +17,8 @@ router = APIRouter(prefix="/courses", tags=["courses"])
 
 def course_response(database: Session, course: Course) -> CourseResponse:
     result = CourseResponse.model_validate(course)
-    result.instructor_name = database.get(User, course.instructor_id).full_name
+    if course.instructor_id:
+        result.instructor_name = database.get(User, course.instructor_id).full_name
     return result
 
 
@@ -58,7 +59,8 @@ def get_course(course_id: UUID, current_user: User = Depends(get_current_user),
 def create_course(payload: CourseCreate, request: Request,
                   current_user: User = Depends(require_roles(UserRole.ADMIN)),
                   database: Session = Depends(get_db)):
-    validate_instructor(database, str(payload.instructor_id))
+    if payload.instructor_id is not None:
+        validate_instructor(database, str(payload.instructor_id))
     course = Course(**payload.model_dump(mode="json"))
     database.add(course)
     try:
@@ -75,14 +77,11 @@ def create_course(payload: CourseCreate, request: Request,
 
 @router.put("/{course_id}", response_model=CourseResponse)
 def update_course(course_id: UUID, payload: CourseUpdate, request: Request,
-                  current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.INSTRUCTOR)),
+                  current_user: User = Depends(require_roles(UserRole.ADMIN)),
                   database: Session = Depends(get_db)):
     course = get_course_or_404(database, str(course_id))
-    require_course_access(database, course, current_user)
     changes = payload.model_dump(mode="json", exclude_unset=True)
-    if "instructor_id" in changes:
-        if current_user.role != "admin" and changes["instructor_id"] != course.instructor_id:
-            raise HTTPException(status_code=403, detail="only admin can reassign an instructor")
+    if changes.get("instructor_id") is not None:
         validate_instructor(database, changes["instructor_id"])
     for field, value in changes.items():
         setattr(course, field, value)

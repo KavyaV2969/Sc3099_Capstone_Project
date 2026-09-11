@@ -110,7 +110,7 @@ def test_course_crud_and_filters(api, course):
     assert course["instructor_name"] == "instructor"
     response = api.request("GET", f"/courses/{course['id']}", "student")
     assert response.json()["code"] == "SC3099"
-    response = api.request("PUT", f"/courses/{course['id']}", json={"name": "Updated"})
+    response = api.request("PUT", f"/courses/{course['id']}", "admin", json={"name": "Updated"})
     assert response.status_code == 200
     assert response.json()["name"] == "Updated"
     response = api.request("GET", "/courses/?semester=AY2026-27%20Sem%201&limit=1&offset=0", "student")
@@ -133,11 +133,12 @@ def test_course_create_requires_admin(api, course, role):
                                      {"venue_longitude": -181}, {"geofence_radius_meters": 0},
                                      {"risk_threshold": 1.1}, {"name": None}])
 def test_course_update_validation(api, course, changes):
-    assert api.request("PUT", f"/courses/{course['id']}", json=changes).status_code == 422
+    assert api.request("PUT", f"/courses/{course['id']}", "admin", json=changes).status_code == 422
 
 
 def test_course_ownership_and_instructor_validation(api, course):
     path = f"/courses/{course['id']}"
+    assert api.request("PUT", path, "instructor", json={"name": "No"}).status_code == 403
     assert api.request("PUT", path, "other_instructor", json={"name": "No"}).status_code == 403
     assert api.request("DELETE", path).status_code == 403
     assert api.request("PUT", path, "admin", json={"instructor_id": str(uuid4())}).status_code == 404
@@ -491,3 +492,44 @@ def test_lookup_failure_does_not_create_an_approved_checkin(api, ready, monkeypa
     assert response.status_code == 503
     with api.database() as database:
         assert database.scalar(select(func.count(Checkin.id))) == 0
+
+
+def test_course_without_instructor_supports_enrollment_and_multiple_session_owners(api):
+    response = api.request("POST", "/courses/", "admin", json={
+        "code": "UNASSIGNED", "name": "Shared course", "semester": "AY2026-27 Sem 1",
+        "venue_latitude": 1.3483, "venue_longitude": 103.6831,
+    })
+    assert response.status_code == 201, response.text
+    course = response.json()
+    assert course["instructor_id"] is None
+    assert course["instructor_name"] is None
+    enrollment = api.request("POST", "/enrollments/", "admin", json={
+        "course_id": course["id"], "student_id": api.users["student"].id})
+    assert enrollment.status_code == 201
+    mine = api.request("GET", "/enrollments/my-enrollments", "student").json()
+    assert mine[0]["course_code"] == "UNASSIGNED"
+    assert "instructor_name" not in mine[0]
+    roster_path = f"/enrollments/course/{course['id']}"
+    assert api.request("GET", roster_path, "instructor").status_code == 403
+    sessions = {}
+    for role in ("instructor", "other_instructor"):
+        response = api.request("POST", "/sessions/", role, json=session_payload(course))
+        assert response.status_code == 201, response.text
+        sessions[role] = response.json()
+        assert sessions[role]["instructor_id"] == api.users[role].id
+        assert api.request("GET", roster_path, role).status_code == 200
+    for role in sessions:
+        mine = api.request("GET", "/sessions/my-sessions", role).json()
+        assert [row["id"] for row in mine] == [sessions[role]["id"]]
+        listed = api.request("GET", "/sessions/", role).json()
+        assert listed["total"] == 1
+    assert api.request("PATCH", f"/sessions/{sessions['instructor']['id']}", "other_instructor",
+                       json={"status": "active"}).status_code == 403
+    assert api.request("DELETE", f"/enrollments/{enrollment.json()['id']}", "instructor").status_code == 204
+
+
+def test_admin_can_clear_optional_course_assignment(api, course):
+    response = api.request("PUT", f"/courses/{course['id']}", "admin", json={"instructor_id": None})
+    assert response.status_code == 200
+    assert response.json()["instructor_id"] is None
+    assert api.request("POST", "/sessions/", "other_instructor", json=session_payload(course)).status_code == 201

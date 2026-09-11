@@ -320,6 +320,8 @@ def detect_face(image_array):
 
     TODO: Implement using:
     - mediapipe.solutions.face_detection.FaceDetection
+      (requires mediapipe==0.10.18 as pinned in requirements.txt; mediapipe
+      >= 0.10.30 removed `mediapipe.solutions` in favour of `mediapipe.tasks`)
     - Return detection results with confidence scores
 
     Consider setting min_detection_confidence=0.5
@@ -358,7 +360,7 @@ def analyze_face_mesh(image_array):
     Analyze face using MediaPipe Face Mesh (BONUS).
 
     TODO: Implement using:
-    - mediapipe.solutions.face_mesh.FaceMesh
+    - mediapipe.solutions.face_mesh.FaceMesh (mediapipe==0.10.18, see note in detect_face)
     - Extract 468 landmarks
     - Calculate depth from nose_tip_z (landmark index 1)
     - Check mesh completeness

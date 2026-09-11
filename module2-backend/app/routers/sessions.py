@@ -71,7 +71,7 @@ def list_sessions(
 ):
     query = session_query()
     if current_user.role == "instructor":
-        query = query.where(Course.instructor_id == current_user.id)
+        query = query.where(Session.instructor_id == current_user.id)
     if status is not None:
         query = query.where(Session.status == status.value)
     if course_id is not None:
@@ -108,7 +108,7 @@ def my_sessions(status: SessionStatus | None = None, upcoming: bool = False,
         query = query.where(Session.course_id.in_(select(Enrollment.course_id).where(
             Enrollment.student_id == current_user.id, Enrollment.is_active.is_(True))))
     elif current_user.role == "instructor":
-        query = query.where(Course.instructor_id == current_user.id)
+        query = query.where(Session.instructor_id == current_user.id)
     elif current_user.role == "ta":
         query = query.where(Session.course_id.in_(select(CourseTA.course_id).where(CourseTA.ta_id == current_user.id)))
     if status is not None:
@@ -133,7 +133,7 @@ def create_session(payload: SessionCreate, request: Request,
                    current_user: User = Depends(require_roles(UserRole.INSTRUCTOR)),
                    database: DatabaseSession = Depends(get_db)):
     course = get_course_or_404(database, str(payload.course_id))
-    if course.instructor_id != current_user.id:
+    if course.instructor_id is not None and course.instructor_id != current_user.id:
         raise HTTPException(status_code=403, detail="course belongs to another instructor")
     if not course.is_active:
         raise HTTPException(status_code=400, detail="course is inactive")

@@ -79,7 +79,7 @@ class Course(Base):
     code: Mapped[str] = mapped_column(String(20), unique=True)
     name: Mapped[str] = mapped_column(String(255))
     semester: Mapped[str] = mapped_column(String(20), index=True)
-    instructor_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    instructor_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), index=True)
     venue_name: Mapped[str | None] = mapped_column(String(255))
     venue_latitude: Mapped[float | None] = mapped_column(Float)
     venue_longitude: Mapped[float | None] = mapped_column(Float)

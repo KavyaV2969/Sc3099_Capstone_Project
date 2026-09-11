@@ -175,7 +175,7 @@ class CourseCreate(BaseModel):
     code: CourseCode
     name: ShortName
     semester: CourseCode
-    instructor_id: UUID
+    instructor_id: UUID | None = None
     venue_name: ShortName | None = None
     venue_latitude: Latitude | None = None
     venue_longitude: Longitude | None = None
@@ -197,7 +197,7 @@ class CourseUpdate(BaseModel):
 
     @model_validator(mode="after")
     def reject_required_nulls(self) -> "CourseUpdate":
-        nullable = {"venue_name", "venue_latitude", "venue_longitude"}
+        nullable = {"instructor_id", "venue_name", "venue_latitude", "venue_longitude"}
         for field in self.model_fields_set - nullable:
             if getattr(self, field) is None:
                 raise ValueError(f"{field} cannot be null")
@@ -236,7 +236,6 @@ class MyEnrollmentResponse(EnrollmentResponse):
     course_code: str
     course_name: str
     semester: str
-    instructor_name: str
 
 
 class EnrolledStudentResponse(BaseModel):

@@ -20,15 +20,14 @@ router = APIRouter(prefix="/enrollments", tags=["enrollments"])
 def my_enrollments(current_user: User = Depends(require_roles(UserRole.STUDENT)),
                    database: Session = Depends(get_db)):
     rows = database.execute(
-        select(Enrollment, Course, User).join(Course, Enrollment.course_id == Course.id)
-        .join(User, Course.instructor_id == User.id)
+        select(Enrollment, Course).join(Course, Enrollment.course_id == Course.id)
         .where(Enrollment.student_id == current_user.id, Enrollment.is_active.is_(True),
                Course.is_active.is_(True)).order_by(Course.code)
     ).all()
     return [{**EnrollmentResponse.model_validate(enrollment).model_dump(),
              "course_code": course.code, "course_name": course.name,
-             "semester": course.semester, "instructor_name": instructor.full_name}
-            for enrollment, course, instructor in rows]
+             "semester": course.semester}
+            for enrollment, course in rows]
 
 
 @router.get("/course/{course_id}", response_model=CourseEnrollmentsResponse)

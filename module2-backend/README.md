@@ -19,16 +19,16 @@ Base path: `/api/v1`
 | GET | `/audit/` | Admin |
 | GET | `/courses/`, `/courses/{course_id}` | Authenticated |
 | POST | `/courses/` | Admin |
-| PUT | `/courses/{course_id}` | Admin or course instructor (partial update) |
+| PUT | `/courses/{course_id}` | Admin (partial update) |
 | DELETE | `/courses/{course_id}` | Admin (soft delete) |
 | GET | `/enrollments/my-enrollments` | Student |
 | GET | `/enrollments/course/{course_id}` | Course instructor, assigned TA, or admin |
 | POST | `/enrollments/` | Course instructor or admin |
 | DELETE | `/enrollments/{enrollment_id}` | Course instructor or admin |
-| GET | `/sessions/` | Instructor (own courses) or admin |
+| GET | `/sessions/` | Instructor (own sessions) or admin |
 | GET | `/sessions/active` | Public; active courses and open check-in windows only |
 | GET | `/sessions/my-sessions`, `/sessions/{session_id}` | Authenticated |
-| POST | `/sessions/` | Instructor teaching the course |
+| POST | `/sessions/` | Instructor (optional course assignment enforced) |
 | PATCH, DELETE | `/sessions/{session_id}` | Session owner (instructor) |
 | POST | `/checkins/` | Actively enrolled student |
 
@@ -59,7 +59,7 @@ prevents new enrollments, sessions, and check-ins for that course.
 
 ## Week 3 workflow and limits
 
-1. Admin creates a course with an active `instructor_id` and venue coordinates.
+1. Admin creates a course with venue coordinates; `instructor_id` is optional.
 2. Instructor/admin enrolls an existing student through `POST /enrollments/`.
 3. Instructor creates a session with a future start and a later end.
 4. Instructor activates it with `PATCH /sessions/{id}` and `{"status":"active"}`.
@@ -106,11 +106,11 @@ geofence boundaries, and the end-to-end flow. Migration tests exercise upgrade,
 downgrade, ORM schema comparison, and PostgreSQL SQL generation. The existing
 PostgreSQL health test requires the configured local database to be running.
 
-Public HTTP tests require a live backend. Their current course fixture omits
-`instructor_id`, and their session fixture activates through a deferred admin
-endpoint. The check-in fixtures also omit consent setup (and sometimes accuracy).
-Those fixtures need to follow the workflow above; ownership and consent checks
-are retained as required by the Week 3 instructions.
+Public HTTP tests require a live backend. Course creation now accepts the provided
+fixture without `instructor_id`, following the revised specification. The session
+fixture still activates through a deferred admin endpoint, and the check-in
+fixtures omit consent setup (and sometimes accuracy). These remaining integration
+requirements are separate from the upstream course-field correction.
 
 ### Live Week 3 verification (2026-09-08)
 
@@ -213,3 +213,33 @@ rejection of public non-Singapore IP `8.8.8.8` supplied first in `X-Forwarded-Fo
 blocking after ten wrong passwords across different IPs, correct-password rejection
 while blocked, and successful login after admin activation. The smoke test now
 needs the public-IP lookup provider or an existing cached country result.
+
+
+## Updated NTULearn starter (September 2026)
+
+The supplied starter removes required course-level instructor fields and makes
+`PUT /courses/{id}` admin-only. Course `instructor_id` remains an optional nullable
+extension, explicitly allowed by the updated spec, so existing assignments are
+preserved. Supplied assignments still restrict session creation to that instructor;
+unassigned courses allow different instructors to create their own sessions.
+
+Session ownership remains `sessions.instructor_id`. Instructor session lists use
+that owner, and an instructor may manage enrollment/rosters for a course through
+an existing session they own or the optional course assignment. Admins may enroll
+students before any session exists. TA assignments retain their existing behavior.
+Own-enrollment responses no longer depend on or return an instructor name.
+
+Migration `20260911_0004_optional_course_instructor.py` only makes the existing
+course FK nullable; it does not drop assignments. Before downgrading this migration,
+all unassigned courses must be assigned an instructor.
+
+The updated API/database specs are copied from the supplied starter. The regenerated
+endpoint reference is retained in `app/main.py`, alongside the working routers and
+health checks. Module 3 and the shared test requirements adopt the supplied
+MediaPipe 0.10.18, NumPy <2 and OpenCV <4.12 constraints; Module 3 also adopts the
+supplied `libgl1` Docker fix and explanatory comments. Module 1 is unchanged.
+
+Verified after the update: 122 backend tests passed; all four public course/session
+tests passed (8/8 points for that selection). Docker startup applied migration
+`20260911_0004` to PostgreSQL, and `alembic check` found no schema differences.
+The full public suite was not rerun for this update.

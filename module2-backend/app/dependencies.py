@@ -4,10 +4,12 @@ from collections.abc import Callable
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models import Course, CourseTA, User
+from app.models import Session as AttendanceSession
 from app.rate_limit import enforce_user_api_limit
 from app.schemas import TokenType, UserRole
 from app.security import InvalidTokenError, decode_token
@@ -58,6 +60,10 @@ def require_course_access(
     database: Session, course: Course, user: User, *, allow_ta: bool = False
 ) -> None:
     if user.role == "admin" or (user.role == "instructor" and course.instructor_id == user.id):
+        return
+    if user.role == "instructor" and database.scalar(select(AttendanceSession.id).where(
+        AttendanceSession.course_id == course.id, AttendanceSession.instructor_id == user.id
+    ).limit(1)):
         return
     if allow_ta and user.role == "ta" and database.get(CourseTA, (course.id, user.id)):
         return
