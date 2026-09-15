@@ -1,7 +1,6 @@
 """Student enrollments and course rosters."""
-from uuid import UUID
-
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from pydantic import UUID4
 from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -10,8 +9,9 @@ from app.audit import write_audit_log
 from app.db import get_db
 from app.dependencies import get_course_or_404, require_course_access, require_roles
 from app.models import Course, Enrollment, User
-from app.schemas import (CourseEnrollmentsResponse, EnrollmentCreate, EnrollmentResponse,
-                         MyEnrollmentResponse, UserRole)
+from app.schemas import (BulkEnrollmentCreate, BulkEnrollmentResponse, CourseEnrollmentsResponse,
+                         EnrollmentCreate, EnrollmentResponse, MyEnrollmentResponse, UserRole)
+from app.services.enrollments import create_enrollment as create_enrollment_record
 
 router = APIRouter(prefix="/enrollments", tags=["enrollments"])
 
@@ -31,7 +31,7 @@ def my_enrollments(current_user: User = Depends(require_roles(UserRole.STUDENT))
 
 
 @router.get("/course/{course_id}", response_model=CourseEnrollmentsResponse)
-def course_enrollments(course_id: UUID, is_active: bool = True, search: str | None = None,
+def course_enrollments(course_id: UUID4, is_active: bool = True, search: str | None = None,
                        current_user: User = Depends(require_roles(UserRole.INSTRUCTOR, UserRole.TA, UserRole.ADMIN)),
                        database: Session = Depends(get_db)):
     course = get_course_or_404(database, str(course_id))
@@ -57,16 +57,9 @@ def create_enrollment(payload: EnrollmentCreate, request: Request,
     require_course_access(database, course, current_user)
     if not course.is_active:
         raise HTTPException(status_code=400, detail="course is inactive")
-    student = database.get(User, str(payload.student_id))
-    if student is None:
-        raise HTTPException(status_code=404, detail="student not found")
-    if student.role != "student" or not student.is_active:
-        raise HTTPException(status_code=400, detail="an active student is required")
-    if database.scalar(select(Enrollment).where(Enrollment.student_id == student.id,
-                                               Enrollment.course_id == course.id)):
-        raise HTTPException(status_code=400, detail="student already enrolled")
-    enrollment = Enrollment(student_id=student.id, course_id=course.id)
-    database.add(enrollment)
+    enrollment = create_enrollment_record(
+        database, student_id=str(payload.student_id), course_id=course.id
+    )
     try:
         database.flush()
     except IntegrityError:
@@ -79,8 +72,55 @@ def create_enrollment(payload: EnrollmentCreate, request: Request,
     return enrollment
 
 
+@router.post("/bulk", response_model=BulkEnrollmentResponse)
+def bulk_enroll(
+    payload: BulkEnrollmentCreate,
+    request: Request,
+    current_user: User = Depends(require_roles(UserRole.INSTRUCTOR, UserRole.ADMIN)),
+    database: Session = Depends(get_db),
+):
+    if payload.create_accounts:
+        raise HTTPException(
+            status_code=422,
+            detail="create_accounts is unsupported because no secure credential recovery contract exists",
+        )
+    course = get_course_or_404(database, str(payload.course_id))
+    require_course_access(database, course, current_user, allow_ta=False)
+    users = {
+        user.email: user for user in database.scalars(
+            select(User).where(User.email.in_(payload.student_emails))
+        )
+    }
+    details = []
+    counters = {"enrolled": 0, "already_enrolled": 0, "not_found": 0}
+    processed: set[str] = set()
+    for email in payload.student_emails:
+        if email in processed:
+            outcome = "already_enrolled"
+        else:
+            processed.add(email)
+            student = users.get(email)
+            if student is None or student.role != "student":
+                outcome = "not_found"
+            else:
+                try:
+                    with database.begin_nested():
+                        create_enrollment_record(database, student_id=student.id, course_id=course.id)
+                    outcome = "enrolled"
+                except HTTPException as exc:
+                    outcome = "already_enrolled" if exc.status_code == 400 and "already" in str(exc.detail) else "not_found"
+        counters[outcome] += 1
+        details.append({"email": email, "status": outcome})
+    write_audit_log(
+        database, request, action="enrollment_bulk_added", user_id=current_user.id,
+        resource_type="course", resource_id=course.id, details=counters,
+    )
+    database.commit()
+    return {**counters, "created": 0, "details": details}
+
+
 @router.delete("/{enrollment_id}", status_code=204)
-def delete_enrollment(enrollment_id: UUID, request: Request,
+def delete_enrollment(enrollment_id: UUID4, request: Request,
                       current_user: User = Depends(require_roles(UserRole.INSTRUCTOR, UserRole.ADMIN)),
                       database: Session = Depends(get_db)):
     enrollment = database.get(Enrollment, str(enrollment_id))

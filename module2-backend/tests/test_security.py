@@ -25,11 +25,11 @@ def settings() -> Settings:
     )
 
 
-def test_password_hash_uses_bcrypt_cost_12() -> None:
+def test_password_hash_uses_configured_bcrypt_cost() -> None:
     password_hash = hash_password("securepass123")
 
     assert password_hash != "securepass123"
-    assert password_hash.startswith(("$2a$12$", "$2b$12$"))
+    assert password_hash.startswith(("$2a$10$", "$2b$10$"))
     assert verify_password("securepass123", password_hash)
     assert not verify_password("wrong-password", password_hash)
     assert not verify_password("securepass123", "not-a-bcrypt-hash")

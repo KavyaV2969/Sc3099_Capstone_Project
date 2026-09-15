@@ -4,15 +4,14 @@ from collections.abc import Callable
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import Course, CourseTA, User
-from app.models import Session as AttendanceSession
+from app.models import Course, User
 from app.rate_limit import enforce_user_api_limit
 from app.schemas import TokenType, UserRole
 from app.security import InvalidTokenError, decode_token
+from app.services.access import get_course as _get_course, require_course_access as _require_course_access
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -50,21 +49,10 @@ def require_roles(*allowed_roles: UserRole) -> Callable[..., User]:
 
 
 def get_course_or_404(database: Session, course_id: str) -> Course:
-    course = database.get(Course, course_id)
-    if course is None:
-        raise HTTPException(status_code=404, detail="course not found")
-    return course
+    return _get_course(database, course_id)
 
 
 def require_course_access(
     database: Session, course: Course, user: User, *, allow_ta: bool = False
 ) -> None:
-    if user.role == "admin" or (user.role == "instructor" and course.instructor_id == user.id):
-        return
-    if user.role == "instructor" and database.scalar(select(AttendanceSession.id).where(
-        AttendanceSession.course_id == course.id, AttendanceSession.instructor_id == user.id
-    ).limit(1)):
-        return
-    if allow_ta and user.role == "ta" and database.get(CourseTA, (course.id, user.id)):
-        return
-    raise HTTPException(status_code=403, detail="insufficient course permissions")
+    _require_course_access(database, course, user, allow_ta=allow_ta)

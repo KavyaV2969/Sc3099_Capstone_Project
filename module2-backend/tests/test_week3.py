@@ -223,7 +223,7 @@ def test_session_delete_and_ownership(api, session, course):
     assert api.request("PATCH", path, "other_instructor", json={"name": "No"}).status_code == 403
     assert api.request("DELETE", path, "other_instructor").status_code == 403
     assert api.request("POST", "/sessions/", "other_instructor", json=session_payload(course)).status_code == 403
-    assert api.request("POST", "/sessions/", "admin", json=session_payload(course)).status_code == 403
+    assert api.request("POST", "/sessions/", "admin", json=session_payload(course)).status_code == 201
     assert api.request("DELETE", path).status_code == 204
     assert api.request("GET", path).status_code == 404
 
