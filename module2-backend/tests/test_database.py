@@ -6,7 +6,7 @@ from app.models import Base
 
 def test_metadata_contains_auth_and_attendance_tables() -> None:
     assert set(Base.metadata.tables) == {
-        "users", "audit_logs", "courses", "course_tas", "enrollments", "sessions", "checkins"
+        "users", "audit_logs", "courses", "course_tas", "enrollments", "sessions", "checkins", "devices"
     }
 
 

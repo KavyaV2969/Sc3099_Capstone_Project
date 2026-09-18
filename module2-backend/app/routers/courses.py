@@ -1,23 +1,26 @@
 """Course administration using the existing auth and audit dependencies."""
-from uuid import UUID
-
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from pydantic import UUID4
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.audit import write_audit_log
 from app.db import get_db
-from app.dependencies import get_current_user, get_course_or_404, require_course_access, require_roles
+from app.dependencies import get_current_user, get_course_or_404, require_roles
 from app.models import Course, User
 from app.schemas import CourseCreate, CourseListResponse, CourseResponse, CourseUpdate, UserRole
 
 router = APIRouter(prefix="/courses", tags=["courses"])
 
 
-def course_response(database: Session, course: Course) -> CourseResponse:
+def course_response(database: Session, course: Course, instructor_name: str | None = None) -> CourseResponse:
     result = CourseResponse.model_validate(course)
-    result.instructor_name = database.get(User, course.instructor_id).full_name
+    if instructor_name is not None:
+        result.instructor_name = instructor_name
+    elif course.instructor_id:
+        instructor = database.get(User, course.instructor_id)
+        result.instructor_name = instructor.full_name if instructor else None
     return result
 
 
@@ -31,11 +34,14 @@ def validate_instructor(database: Session, instructor_id: str) -> None:
 
 @router.get("/", response_model=CourseListResponse)
 def list_courses(
-    is_active: bool = True, semester: str | None = None, instructor_id: UUID | None = None,
+    is_active: bool = True, semester: str | None = None, instructor_id: UUID4 | None = None,
     limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user), database: Session = Depends(get_db),
 ):
-    query = select(Course).where(Course.is_active == is_active)
+    instructor = User.__table__.alias("instructor")
+    query = (select(Course, instructor.c.full_name)
+             .outerjoin(instructor, instructor.c.id == Course.instructor_id)
+             .where(Course.is_active == is_active))
     if semester is not None:
         query = query.where(Course.semester == semester)
     if instructor_id is not None:
@@ -43,13 +49,13 @@ def list_courses(
             raise HTTPException(status_code=403, detail="instructor filter requires admin")
         query = query.where(Course.instructor_id == str(instructor_id))
     total = database.scalar(select(func.count()).select_from(query.subquery()))
-    courses = database.scalars(query.order_by(Course.code).offset(offset).limit(limit)).all()
-    return {"items": [course_response(database, course) for course in courses],
+    courses = database.execute(query.order_by(Course.code).offset(offset).limit(limit)).all()
+    return {"items": [course_response(database, course, instructor_name) for course, instructor_name in courses],
             "total": total, "limit": limit, "offset": offset}
 
 
 @router.get("/{course_id}", response_model=CourseResponse)
-def get_course(course_id: UUID, current_user: User = Depends(get_current_user),
+def get_course(course_id: UUID4, current_user: User = Depends(get_current_user),
                database: Session = Depends(get_db)):
     return course_response(database, get_course_or_404(database, str(course_id)))
 
@@ -58,7 +64,8 @@ def get_course(course_id: UUID, current_user: User = Depends(get_current_user),
 def create_course(payload: CourseCreate, request: Request,
                   current_user: User = Depends(require_roles(UserRole.ADMIN)),
                   database: Session = Depends(get_db)):
-    validate_instructor(database, str(payload.instructor_id))
+    if payload.instructor_id is not None:
+        validate_instructor(database, str(payload.instructor_id))
     course = Course(**payload.model_dump(mode="json"))
     database.add(course)
     try:
@@ -74,15 +81,12 @@ def create_course(payload: CourseCreate, request: Request,
 
 
 @router.put("/{course_id}", response_model=CourseResponse)
-def update_course(course_id: UUID, payload: CourseUpdate, request: Request,
-                  current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.INSTRUCTOR)),
+def update_course(course_id: UUID4, payload: CourseUpdate, request: Request,
+                  current_user: User = Depends(require_roles(UserRole.ADMIN)),
                   database: Session = Depends(get_db)):
     course = get_course_or_404(database, str(course_id))
-    require_course_access(database, course, current_user)
     changes = payload.model_dump(mode="json", exclude_unset=True)
-    if "instructor_id" in changes:
-        if current_user.role != "admin" and changes["instructor_id"] != course.instructor_id:
-            raise HTTPException(status_code=403, detail="only admin can reassign an instructor")
+    if changes.get("instructor_id") is not None:
         validate_instructor(database, changes["instructor_id"])
     for field, value in changes.items():
         setattr(course, field, value)
@@ -98,7 +102,7 @@ def update_course(course_id: UUID, payload: CourseUpdate, request: Request,
 
 
 @router.delete("/{course_id}", status_code=204)
-def delete_course(course_id: UUID, request: Request,
+def delete_course(course_id: UUID4, request: Request,
                   current_user: User = Depends(require_roles(UserRole.ADMIN)),
                   database: Session = Depends(get_db)):
     course = get_course_or_404(database, str(course_id))

@@ -2,32 +2,36 @@
 
 from datetime import datetime, timedelta, timezone
 
-import bcrypt
 from jose import JWTError, jwt
+from passlib.context import CryptContext
 from pydantic import ValidationError
 
 from app.config import Settings, get_settings
 from app.schemas import TokenPayload, TokenType, UserRole
-
-BCRYPT_ROUNDS = 12
-
 
 class InvalidTokenError(ValueError):
     """Raised when a JWT is invalid or has the wrong token type."""
 
 
 def hash_password(password: str) -> str:
-    """Hash a password with bcrypt cost 12."""
+    """Hash a password using the configured bcrypt work factor."""
     encoded = password.encode("utf-8")
     if len(encoded) > 72:
         raise ValueError("password must not exceed 72 UTF-8 bytes")
-    return bcrypt.hashpw(encoded, bcrypt.gensalt(rounds=BCRYPT_ROUNDS)).decode("utf-8")
+    context = CryptContext(
+        schemes=["bcrypt"],
+        deprecated="auto",
+        bcrypt__rounds=get_settings().bcrypt_rounds,
+    )
+    return context.hash(password)
 
 
 def verify_password(password: str, password_hash: str) -> bool:
     """Safely compare a plaintext password with a bcrypt hash."""
     try:
-        return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
+        if len(password.encode("utf-8")) > 72:
+            return False
+        return CryptContext(schemes=["bcrypt"], deprecated="auto").verify(password, password_hash)
     except (TypeError, ValueError):
         return False
 

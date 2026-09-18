@@ -15,11 +15,12 @@ import httpx
 def main() -> None:
     base_url = os.getenv("TEST_BACKEND_URL", "http://localhost:8000")
     run_id = uuid4().hex[:10]
-    users, headers = {}, {}
+    users, headers, credentials = {}, {}, {}
     with httpx.Client(base_url=base_url, timeout=15.0) as client:
         def request(method, path, role=None, *, expected=200, **kwargs):
+            request_headers = {**headers.get(role, {}), **kwargs.pop("headers", {})}
             response = client.request(method, "/api/v1" + path,
-                                      headers=headers.get(role, {}), **kwargs)
+                                      headers=request_headers, **kwargs)
             if response.status_code != expected:
                 raise RuntimeError(f"{method} {path}: expected {expected}, got {response.status_code}")
             return response.json() if response.content else None
@@ -31,6 +32,7 @@ def main() -> None:
         for role in ("admin", "instructor", "student"):
             email = f"week3-{run_id}-{role}@example.com"
             password = secrets.token_urlsafe(24)
+            credentials[role] = {"email": email, "password": password}
             users[role] = request("POST", "/auth/register", expected=201, json={
                 "email": email, "password": password,
                 "full_name": f"Week 3 smoke {role}", "role": role,
@@ -72,6 +74,11 @@ def main() -> None:
                 request("PUT", "/users/me", "student", json={
                     "camera_consent": True, "geolocation_consent": True,
                 })
+                request("POST", "/checkins/", "student", expected=403,
+                        json={**payload, "latitude": 1.46, "longitude": 103.75},
+                        headers={"X-Forwarded-For": "192.168.1.2"})
+                request("POST", "/checkins/", "student", expected=403, json=payload,
+                        headers={"X-Forwarded-For": "8.8.8.8, 192.168.1.2"})
             checkin = request("POST", "/checkins/", "student", expected=201, json=payload)
             assert checkin["status"] == outcome
             assert checkin["liveness_passed"] is None
@@ -83,7 +90,16 @@ def main() -> None:
             results.append({"session_id": session["id"], "checkin_id": checkin["id"],
                             "status": outcome, "distance_meters": round(checkin["distance_from_venue_meters"], 2)})
 
-        print(json.dumps({"result": "passed", "course_id": course["id"],
+        wrong = {**credentials["student"], "password": "wrong-password"}
+        for attempt in range(1, 11):
+            request("POST", "/auth/login", expected=429 if attempt == 10 else 401,
+                    json=wrong, headers={"X-Forwarded-For": f"10.0.0.{attempt}"})
+        request("POST", "/auth/login", expected=429, json=credentials["student"])
+        request("PATCH", f"/admin/users/{users['student']['id']}/activate", "admin")
+        request("POST", "/auth/login", json=credentials["student"])
+
+        print(json.dumps({"result": "passed", "lockout_and_singapore_checks": "passed",
+                          "course_id": course["id"],
                           "course_code": course["code"], "checkins": results}, indent=2))
 
 
