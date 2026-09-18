@@ -28,6 +28,7 @@ function canCheckIn(session: Session): boolean {
 export default function Home() {
   const router = useRouter();
   const [checked, setChecked] = useState(false);
+  const [faceEnrolled, setFaceEnrolled] = useState<boolean | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -39,17 +40,22 @@ export default function Home() {
     }
     setChecked(true);
 
-    async function loadActiveSessions() {
+    async function loadData() {
       try {
-        const { data } = await api.get<Session[]>("/sessions/my-sessions");
-        setSessions(data.filter((s) => s.status === "active"));
+        const { data: user } = await api.get("/users/me");
+        setFaceEnrolled(user.face_enrolled);
+
+        if (user.face_enrolled) {
+          const { data: sessionData } = await api.get<Session[]>("/sessions/my-sessions");
+          setSessions(sessionData.filter((s) => s.status === "active"));
+        }
       } catch (err: any) {
-        setError(err?.response?.data?.detail ?? "Failed to load sessions");
+        setError(err?.response?.data?.detail ?? "Failed to load your data.");
       } finally {
         setLoading(false);
       }
     }
-    loadActiveSessions()
+    loadData();
   }, [router]);
 
   if (!checked) {
@@ -58,35 +64,58 @@ export default function Home() {
 
   return (
     <AppShell>
-      <h1 className="text-2xl font-bold mb-6">Active Sessions</h1>
+      {loading && <p className="text-gray-500">Loading ...</p>}
 
       {error && <div className="alert-error">{error}</div>}
-      {loading && <p className="text-gray-500">Loading sessions...</p>}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {sessions.map((session) => (
-          <div key={session.id} className="card-panel !max-w-none">
-            <p className="text-sm text-gray-500">{session.course_code}</p>
-            <h2 className="text-lg font-semibold">{session.course_name}</h2>
-            <p className="text-sm text-gray-600 mt-1">
-              {session.name} · {formatTime(session.scheduled_start)}–{formatTime(session.scheduled_end)}
+      {!loading && faceEnrolled === false && (
+        <div className="card-panel !max-w-none text-center">
+          <h1 className="text-xl font-bold mb-2">Check-in</h1>
+          <p className="text-gray-400 mb-4">
+            Face Enrollment Required
+          </p>
+
+          <div className="card-panel !max-w-none">
+            <h1 className="text-xl font-bold mb-2">Enrol face first</h1>
+            <p className="text-gray-400 mb-4">
+              You need to register your face first before you can check in to any sessions.
             </p>
-            <p className="text-sm text-gray-600">{session.venue_name}</p>
-
             <button
-              className="btn-primary mt-4"
-              disabled={!canCheckIn(session)}
-              onClick={() => alert("Check-in flow not built yet")}
+              className="btn-primary"
+              onClick={()=> router.push("/enroll-face")}
             >
-              {canCheckIn(session) ? "Check In" : "Not open"}
+              Register Face
+            </button>
+            <button
+              className="btn-secondary gap-3 self-center mt-3"
+              onClick={() => router.push("/")}>
+                Privacy & Security
             </button>
           </div>
-        ))}
+        </div>
+      )}
 
-        {!loading && sessions.length === 0 && (
-          <p className="text-gray-500">No active sessions right now.</p>
-        )}
-      </div>
+      {!loading && faceEnrolled === true && (
+        <>
+          <h1 className="text-2xl font-bold mb-6">Active Sessions</h1>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {sessions.map((session) => (
+              <button
+                key={session.id}
+                className="card-panel !max-w-none text-left disabled:opacity-60 disabled:cursor-not-allowed hover:shadow-md transition-shadow"
+                disabled={!canCheckIn(session)}
+              >
+                <p className="text-sm text-gray-500">{session.course_code}</p>
+                <h2 className="text-lg font-semibold">{session.course_name}</h2>
+                <p className="text-sm text-gray-600">{session.venue_name}</p>
+                <p className="text-sm font-medium text-blue-600 mt-4">
+                  {canCheckIn(session) ? "Tap to check in" : "Not open"}
+                </p>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </AppShell>
   );
 

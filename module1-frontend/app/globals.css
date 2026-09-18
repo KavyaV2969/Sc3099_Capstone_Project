@@ -24,6 +24,11 @@ body {
          transition-colors;
 }
 
+.btn-secondary {
+  @apply w-full bg-white text-gray-700 border border-gray-300 rounded-lg p-3
+         font-semibold hover:bg-gray-100 transition-colors;
+}
+
 /* red error banner on failure */
 .alert-error {
   @apply bg-red-100 border-l-4 border-red-500 text-red-700 p-3 mb-4 text-sm;
