@@ -43,3 +43,23 @@ body {
 .field-label {
   @apply block text-sm text-gray-600 mb-1;
 }
+
+/* Toggle switch: visually a checkbox, styled as an iOS-style switch */
+.switch {
+  @apply relative inline-block w-11 h-6 shrink-0;
+}
+.switch input {
+  @apply absolute opacity-0 w-0 h-0;
+}
+.switch-track {
+  @apply absolute inset-0 bg-gray-300 rounded-full transition-colors cursor-pointer;
+}
+.switch input:checked + .switch-track {
+  @apply bg-blue-600;
+}
+.switch-thumb {
+  @apply absolute h-4 w-4 left-1 top-1 bg-white rounded-full transition-transform;
+}
+.switch input:checked ~ .switch-thumb {
+  @apply translate-x-5;
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { AppShell } from "@/components/ui/layout/AppShell";
@@ -13,8 +13,32 @@ export default function EnrollFacePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [result, setResult] = useState<{ success: boolean; message: string; quality_score: number } | null>(null);
   const [error, setError] = useState("");
+  const [hasConsent, setHasConsent] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    async function checkConsent() {
+      try {
+        const { data } = await api.get("/users/me");
+        setHasConsent(data.camera_consent);
+      } catch {
+        setHasConsent(false);
+      }
+    }
+    checkConsent();
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      stopCamera();
+    };
+  }, []);
 
   async function startCamera() {
+    if (!hasConsent) {
+      router.push("/permission-denied?type=camera&return=/enroll-face");
+      return;
+    }
+
     setError("");
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
@@ -23,13 +47,22 @@ export default function EnrollFacePage() {
         setStreamActive(true);
       }
     } catch (err: any) {
-      setError("Could not access camera. Please check permissions.");
+      if (err.name === "NotAllowedError") {
+        setError(
+          "Your browser has blocked camera access. Click the camera icon in your address bar to allow it, then try again."
+        );
+      } else {
+        setError("Could not access camera. Please check your device and try again.");
+      }
     }
   }
 
   function stopCamera() {
     const stream = videoRef.current?.srcObject as MediaStream | null;
     stream?.getTracks().forEach((track) => track.stop());
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
     setStreamActive(false);
   }
 
@@ -45,12 +78,13 @@ export default function EnrollFacePage() {
 
     const imageDataUrl = canvas.toDataURL("image/jpeg", 0.9);
 
+    stopCamera();
+
     setIsSubmitting(true);
     setError("");
     try {
       const { data } = await api.post("/users/me/face/enroll", { image: imageDataUrl });
       setResult(data);
-      stopCamera();
     } catch (err: any) {
       setError(err?.response?.data?.detail ?? "Face enrollment failed. Please try again.");
     } finally {
@@ -110,7 +144,10 @@ export default function EnrollFacePage() {
           )}
           <button
               className="text-gray-600 underline text-sm self-center whitespace-nowrap"
-              onClick={() => router.push("/")}>
+              onClick={() => {
+                stopCamera();
+                router.push("/")
+              }}>
                 Skip for now
           </button>
         </div>
