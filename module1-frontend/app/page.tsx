@@ -8,6 +8,8 @@
 
 "use client";
 import { clearAuthStorage, hasAccessToken } from "@/lib/storage";
+import { cacheSessions, getCachedSessions } from "@/lib/offlineCache";
+import { cacheUser, getCachedUser } from "@/lib/offlineCache";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
@@ -41,19 +43,40 @@ export default function Home() {
     setChecked(true);
 
     async function loadData() {
+      let user;
       try {
-        const { data: user } = await api.get("/users/me");
-        setFaceEnrolled(user.face_enrolled);
-
-        if (user.face_enrolled) {
-          const { data: sessionData } = await api.get<Session[]>("/sessions/my-sessions");
-          setSessions(sessionData.filter((s) => s.status === "active"));
+        const { data } = await api.get("/users/me");
+        user = data;
+        await cacheUser(user);
+      } catch (networkErr) {
+        const cached = await getCachedUser();
+        if (cached) {
+          user = cached;
+          setError("Showing offline data — may not be up to date.");
+        } else {
+          setError("Failed to load your data.");
+          setLoading(false);
+          return;
         }
-      } catch (err: any) {
-        setError(err?.response?.data?.detail ?? "Failed to load your data.");
-      } finally {
-        setLoading(false);
       }
+
+      setFaceEnrolled(user.face_enrolled);
+
+      if (user.face_enrolled) {
+        try {
+          const { data: sessionData } = await api.get<Session[]>("/sessions/my-sessions");
+          const activeSessions = sessionData.filter((s) => s.status === "active");
+          setSessions(activeSessions);
+          await cacheSessions(activeSessions);
+        } catch (networkErr) {
+          const cached = await getCachedSessions();
+          if (cached) {
+            setSessions(cached);
+          }
+        }
+      }
+
+      setLoading(false);
     }
     loadData();
   }, [router]);
@@ -88,7 +111,7 @@ export default function Home() {
             </button>
             <button
               className="btn-secondary gap-3 self-center mt-3"
-              onClick={() => router.push("/")}>
+              onClick={() => router.push("/privacy")}>
                 Privacy & Security
             </button>
           </div>
