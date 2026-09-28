@@ -1,5 +1,6 @@
 # Local Python virtual environment
 .venv/
 
-# Locally generated or working documentation
-docs/
+# Locally generated or working documentation. Keep grading overrides trackable.
+docs/*
+!docs/GRADING-CLARIFICATIONS.md

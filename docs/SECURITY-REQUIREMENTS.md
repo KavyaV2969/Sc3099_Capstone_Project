@@ -2,6 +2,11 @@
 
 This document defines all security parameters for the SAIV system. These values are the authoritative source and must be used consistently across all modules.
 
+> **Later grading overrides:** Read
+> [`GRADING-CLARIFICATIONS.md`](GRADING-CLARIFICATIONS.md) first. It overrides the
+> login/registration rate limits, adds the graded ten-failure account lockout, and
+> makes Singapore-only check-ins mandatory.
+
 ---
 
 ## Authentication
@@ -75,14 +80,18 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 ## Rate Limiting
 
+> **Grading override:** Login and registration are each limited to **100,000 per
+> hour per IP**. General API and check-in limits remain unchanged. See
+> [`GRADING-CLARIFICATIONS.md`](GRADING-CLARIFICATIONS.md).
+
 ### Limits (Redis-based)
 
 | Endpoint Category | Limit | Window | Key |
 |-------------------|-------|--------|-----|
-| Login attempts | 60 | 1 hour | IP address |
+| Login attempts | 100,000 | 1 hour | IP address |
 | API requests | 1000 | 1 hour | User ID |
 | Check-in attempts | 10 | 1 minute | User ID |
-| Registration | 10 | 1 hour | IP address |
+| Registration | 100,000 | 1 hour | IP address |
 
 **Implementation with Redis:**
 ```python

@@ -1,5 +1,9 @@
 # SAIV Module Integration Guide
 
+> Apply [`../GRADING-CLARIFICATIONS.md`](../GRADING-CLARIFICATIONS.md) before this
+> recommended guide when requirements conflict. Private/local client addresses may
+> be allowed for Singapore-only grading and must not be rejected merely as VPNs.
+
 This guide explains how the 4 SAIV modules communicate and integrate with each other.
 
 ---

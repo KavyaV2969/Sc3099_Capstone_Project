@@ -1,5 +1,9 @@
 # SAIV API Specification
 
+> **Later grading overrides:** Read
+> [`GRADING-CLARIFICATIONS.md`](GRADING-CLARIFICATIONS.md) first. It defines the
+> graded account lockout, rate-limit overrides, and Singapore-only check-in rules.
+
 ## Base URL
 ```
 http://localhost:8000/api/v1
@@ -58,6 +62,11 @@ Register a new user.
 
 #### POST /auth/login
 Login to receive JWT tokens.
+
+After ten consecutive failed passwords on the same account, the account is blocked.
+The tenth failure and later attempts return `429 Too Many Requests`, including a
+correct-password attempt, until an administrator reactivates the account. See
+[`GRADING-CLARIFICATIONS.md`](GRADING-CLARIFICATIONS.md).
 
 **Request:**
 ```json
@@ -507,6 +516,9 @@ Check-ins record student attendance at sessions.
 
 #### POST /checkins/
 Student check-in to a session. **Requires auth (student only).**
+
+This endpoint also enforces the graded Singapore-only GPS and client-IP rules in
+[`GRADING-CLARIFICATIONS.md`](GRADING-CLARIFICATIONS.md).
 
 **Request:**
 ```json
@@ -1669,12 +1681,16 @@ All endpoints may return these error codes:
 
 ## Rate Limiting
 
+> **Grading override:** Use 100,000/hour/IP for login and registration. Retain
+> 1,000/hour/user for general authenticated API requests and 10/minute/user for
+> check-in attempts. See [`GRADING-CLARIFICATIONS.md`](GRADING-CLARIFICATIONS.md).
+
 | Endpoint Type | Limit | Window |
 |---------------|-------|--------|
-| Login attempts | 60 | per hour per IP |
+| Login attempts | 100,000 | per hour per IP |
 | API requests | 1000 | per hour per user |
 | Check-in attempts | 10 | per minute per user |
-| Registration | 10 | per hour per IP |
+| Registration | 100,000 | per hour per IP |
 
 ---
 

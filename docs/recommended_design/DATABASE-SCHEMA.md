@@ -1,5 +1,9 @@
 # SAIV Database Schema
 
+> Apply [`../GRADING-CLARIFICATIONS.md`](../GRADING-CLARIFICATIONS.md) before this
+> recommended design when requirements conflict, especially for account lockout and
+> Singapore-only check-ins.
+
 ## Overview
 
 PostgreSQL database with 8 main tables for users, courses, sessions, check-ins, devices, risk signals, and audit logs.
