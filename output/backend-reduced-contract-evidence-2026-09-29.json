@@ -1,0 +1,165 @@
+{
+  "date": "2026-09-29",
+  "policy": "explicit user-approved public contract reductions",
+  "canonical_head": "20260929_0009",
+  "historical_recovery_base": "20260928_0006",
+  "full_backend": {
+    "cases": 389,
+    "passed": 389,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 0,
+    "seconds": 59.69
+  },
+  "postgresql_cases": 74,
+  "pinned_image": {
+    "passed": 315,
+    "skipped": 0,
+    "seconds": 18.54
+  },
+  "public_fresh": {
+    "cases": 67,
+    "passed": 66,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 1,
+    "seconds": 14.23
+  },
+  "public_populated": {
+    "cases": 67,
+    "passed": 66,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 1,
+    "seconds": 16.05
+  },
+  "supplied_skip": [
+    {
+      "class": "tests.public.test_performance.TestConcurrentUsers",
+      "name": "test_concurrent_checkins",
+      "reason": "Flaky test - can fail due to SQLite concurrent write limitations in test environment"
+    }
+  ],
+  "production_image": "sha256:fcdd307f75dc002593382ec7f94ba1d20b7d3b8d6994d5f68bac8f5725de962d",
+  "test_image": "sha256:30681f3f948fb4d0b5bb768d15b8c6326b7a833dc063a8923f8c5ca29f63c0e4",
+  "load": [
+    {
+      "concurrent_users": 10,
+      "method": "GET",
+      "route": "/users/me",
+      "requests": 30,
+      "seconds": 0.137,
+      "p95_seconds": 0.038,
+      "max_seconds": 0.062,
+      "statuses": {
+        "200": 30
+      },
+      "unexpected_errors": {},
+      "database_wait_samples": {},
+      "meets_2_second_target": true
+    },
+    {
+      "concurrent_users": 10,
+      "method": "POST",
+      "route": "/checkins/",
+      "requests": 10,
+      "seconds": 0.162,
+      "p95_seconds": 0.149,
+      "max_seconds": 0.149,
+      "statuses": {
+        "201": 10
+      },
+      "unexpected_errors": {},
+      "database_wait_samples": {
+        "IO:WALSync": 1,
+        "Lock:transactionid": 1,
+        "Lock:tuple": 3
+      },
+      "meets_2_second_target": true
+    },
+    {
+      "concurrent_users": 100,
+      "method": "GET",
+      "route": "/users/me",
+      "requests": 300,
+      "seconds": 1.108,
+      "p95_seconds": 0.435,
+      "max_seconds": 0.48,
+      "statuses": {
+        "200": 300
+      },
+      "unexpected_errors": {},
+      "database_wait_samples": {},
+      "meets_2_second_target": true
+    },
+    {
+      "concurrent_users": 100,
+      "method": "POST",
+      "route": "/checkins/",
+      "requests": 100,
+      "seconds": 1.579,
+      "p95_seconds": 1.402,
+      "max_seconds": 1.49,
+      "statuses": {
+        "201": 100
+      },
+      "unexpected_errors": {},
+      "database_wait_samples": {
+        "IO:WALSync": 3,
+        "Lock:transactionid": 2,
+        "Lock:tuple": 4
+      },
+      "meets_2_second_target": true
+    }
+  ],
+  "deployment": {
+    "8000": {
+      "health": {
+        "status": "healthy",
+        "service": "backend",
+        "api": "healthy",
+        "database": "healthy",
+        "redis": "healthy",
+        "schema": "healthy"
+      },
+      "metrics_available": true
+    },
+    "18000": {
+      "health": {
+        "status": "healthy",
+        "service": "backend",
+        "api": "healthy",
+        "database": "healthy",
+        "redis": "healthy",
+        "schema": "healthy"
+      },
+      "metrics_available": true
+    },
+    "prometheus_backend_up": true
+  },
+  "backups": {
+    "pre_upgrade_restore_verified": true,
+    "final_restore_verified": true,
+    "final_restored_schema_strict_ready": true,
+    "existing_integration_rows_preserved": true
+  },
+  "schema_delta": "only checkins.location_accuracy_meters nullable=false -> true",
+  "historical_migrations_contracts_unchanged": true,
+  "external_tests_scoring_and_excluded_modules_unchanged": true,
+  "external_source_hashes_normalized_lf": {
+    "tests/_http_fixtures.py": "49f7f6d5ca1f6ec8623205e5752590aac2010e29e5447ae0ef855c521a7c2a96",
+    "tests/_test_helpers.py": "9a4ba2d72c83dc901a1613d839fd2686780819cc0e8b868a38643f9be63e2e99",
+    "tests/conftest.py": "7d3229887faedbff975f6780c9119e771b2cb8361ab9f91a4461f717043349a0",
+    "tests/public/test_api_functional.py": "bd0cc65e7d5e0db40134da2592608b31de49ef314f7d1b55fa0ced1119096067",
+    "tests/public/test_face_recognition.py": "79f11d916ca39de91367857fbafd66b070bc9a0728c799c4339483c666c5b5e7",
+    "tests/public/test_frontend_dashboard.py": "ced2f105010d17d4dcc2d03fdb8bf647048493a9c151594702b05cee4f9cdbe4",
+    "tests/public/test_integration.py": "80af1e66ad86086a0d6d2821f23163ee574647a8a2289cad5e76f5c7354a29d9",
+    "tests/public/test_observability.py": "dcfcfb2328447571a03d61d62ac3e608091c897fb796ad8fd68d14a56e81f787",
+    "tests/public/test_performance.py": "942522fb7e06320708bb6decff4c7bd88f26e33bcfbbfcf5645351272c144f16",
+    "tests/public/test_privacy_basic.py": "6cff2e74ab2640584b4a440633bbc8f6b556ae8a90c1b99a5598a6c411453282",
+    "tests/public/test_security_basic.py": "18cf40604e94f70599a0ec9e562321c338e7977f98f3247f1e3a973f0a48c40d",
+    "tests/scoring/__init__.py": "544eddc0a2217f7ce172b5bf0779403062e904ed4de0e3f1929b7e150ffb96e5",
+    "tests/scoring/plugin.py": "9661436aee2629cd709b623a1e2fbde8788ad8863ced48940c638e18229e1147"
+  },
+  "real_biometric_interoperability": "Deferred by user; no functioning external implementation supplied"
+}

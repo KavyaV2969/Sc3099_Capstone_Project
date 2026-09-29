@@ -79,7 +79,7 @@ def records(pg_engine, monkeypatch):
     (User, "user", "is_active", False, 401),
     (User, "user", "role", "instructor", 403),
     (User, "user", "camera_consent", False, 403),
-    (User, "user", "geolocation_consent", False, 403),
+    (User, "user", "geolocation_consent", False, None),
     (User, "user", "face_enrolled", False, 400),
     (Course, "course", "is_active", False, 400),
     (Enrollment, "enrollment", "is_active", False, 403),
@@ -106,15 +106,23 @@ def test_changes_during_verification_block_finalization(records, monkeypatch, mo
 
         monkeypatch.setattr(checkins, "check_liveness", live)
         monkeypatch.setattr(checkins, "verify_face", face)
-        with pytest.raises(HTTPException) as failure:
-            asyncio.run(checkins.create_checkin(payload, request, current, db))
-        assert failure.value.status_code == expected
+        if expected is None:
+            result = asyncio.run(checkins.create_checkin(payload, request, current, db))
+            assert result.status == "approved"
+        else:
+            with pytest.raises(HTTPException) as failure:
+                asyncio.run(checkins.create_checkin(payload, request, current, db))
+            assert failure.value.status_code == expected
     with factory() as db:
-        assert db.scalar(select(func.count(Checkin.id)).where(Checkin.session_id == ids["session"])) == 0
+        assert db.scalar(select(func.count(Checkin.id)).where(Checkin.session_id == ids["session"])) == (1 if expected is None else 0)
         device = db.get(Device, ids["device"])
-        assert device.total_checkins == 3 and device.last_seen_at == original_seen
-        events = db.scalars(select(AuditLog).where(AuditLog.resource_id == ids["session"])).all()
-        assert [e.action for e in events] == ["checkin_attempted", "checkin_rejected"]
+        assert device.total_checkins == (4 if expected is None else 3)
+        if expected is not None:
+            assert device.last_seen_at == original_seen
+        else:
+            assert db.get(User, ids["user"]).geolocation_consent is False
+        events = db.scalars(select(AuditLog).where(AuditLog.user_id == ids["user"])).all()
+        assert [e.action for e in events] == ["checkin_attempted", "checkin_approved" if expected is None else "checkin_rejected"]
         assert "private-image" not in str([e.details for e in events])
 
 
@@ -199,3 +207,23 @@ def test_enrollment_rechecks_account_and_consent_after_service(records, monkeypa
         db.rollback()
     with factory() as db:
         assert db.get(User, ids["user"]).face_embedding_hash == "a" * 64
+
+
+@pytest.mark.parametrize("field,value", [("camera_consent", False), ("require_liveness_check", False)])
+def test_evaluated_optional_liveness_policy_change_requires_retry(records, monkeypatch, field, value):
+    factory, ids, payload, request = records
+    with factory() as writer:
+        writer.get(Session, ids["session"]).require_face_match = False
+        writer.commit()
+    async def live(image):
+        with factory() as writer:
+            row = writer.get(User, ids["user"]) if field == "camera_consent" else writer.get(Session, ids["session"])
+            setattr(row, field, value); writer.commit()
+        return LivenessResult(liveness_passed=True, liveness_score=.8, liveness_threshold=.6)
+    monkeypatch.setattr(checkins, "check_liveness", live)
+    with factory() as db:
+        with pytest.raises(HTTPException) as failure:
+            asyncio.run(checkins.create_checkin(payload, request, db.get(User, ids["user"]), db))
+        assert failure.value.status_code == 409
+    with factory() as db:
+        assert db.scalar(select(func.count(Checkin.id)).where(Checkin.session_id == ids["session"])) == 0

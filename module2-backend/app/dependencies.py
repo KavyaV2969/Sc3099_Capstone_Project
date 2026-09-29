@@ -63,6 +63,6 @@ def get_course_or_404(database: Session, course_id: str) -> Course:
 
 
 def require_course_access(
-    database: Session, course: Course, user: User, *, allow_ta: bool = False
+    database: Session, course: Course, user: User, *, allow_ta: bool = False, read_only: bool = False
 ) -> None:
-    _require_course_access(database, course, user, allow_ta=allow_ta)
+    _require_course_access(database, course, user, allow_ta=allow_ta, read_only=read_only)

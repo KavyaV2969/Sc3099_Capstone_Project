@@ -80,9 +80,12 @@ def test_flags_control_calls_and_approved_evidence(api, ready, face_http, live, 
 def test_required_image_fails_before_any_call(api, ready, face_http, image, live, face):
     enabled(api, ready, live, face)
     response = api.request("POST", "/checkins/", "student", json=checkin_payload(ready, liveness_challenge_response=image))
-    assert response.status_code == 400 and face_http[0] == []
+    assert response.status_code == (400 if face else 201) and face_http[0] == []
+    if not face:
+        assert response.json()["liveness_passed"] is None
+        assert response.json()["liveness_score"] is None
     with api.database() as db:
-        assert db.scalar(select(func.count(Checkin.id))) == 0
+        assert db.scalar(select(func.count(Checkin.id))) == (0 if face else 1)
 
 
 def invalid_results(valid, passed, score, threshold):

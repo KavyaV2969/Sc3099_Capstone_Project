@@ -1,5 +1,17 @@
 # Module 2 implementation completion — 29 September 2026
 
+> **Historical evidence:** Current status and policy are superseded by the user-approved
+> [reduced-contract implementation and release report](backend-reduced-contract-2026-09-29.md).
+> The earlier remaining-conflict claims below describe the policy before those reductions.
+
+**Later public-test compatibility update:** Minimal documented consumer aliases
+and admin read routes have been added. Fresh backend-local verification is
+**356 passed**; pinned image **285 passed**. The unchanged full public suite is
+**68 passed, 12 failed, 1 fixture error, 16 skipped**. The user chose to keep the
+public tests unchanged and document conflicting requirements. See the
+[reconciliation report](backend-public-test-reconciliation-2026-09-29.md).
+Earlier release/image/load evidence below describes the preceding completion build.
+
 **Backend implementation: complete for the agreed required scope. Real biometric
 integration: deferred by the user and not certified.** The supplied Module 3
 operations return 501 and no functioning external service/approved face fixture
@@ -98,7 +110,7 @@ continuing. Final fresh results are recorded below.
 
 ## Final verification and release evidence
 
-- Full host suite with PostgreSQL and real Redis: **349 passed in 67.83 seconds,
+- Full backend-local suite (`module2-backend/tests`) with PostgreSQL and real Redis: **349 passed in 67.83 seconds,
   zero failures, errors or skips**. Includes all original 54 PostgreSQL cases
   plus 17 new PostgreSQL cases (71 total).
   Final JUnit evidence: `tmp/backend-completion-final.xml`.
@@ -148,6 +160,28 @@ Normal-API load fixtures are created only in the isolated restored database,
 with explicitly optional biometric flags. They measure normal backend paths and
 course-lock contention, not biometric performance. No policy on existing
 integration sessions was disabled. Live biometric latency cannot be reported.
+
+### Supplied outer public tests — follow-up verification
+
+The 349-pass result above did **not** include the repository-root `tests/public`
+suite. All 97 supplied public tests collect successfully. A separate live HTTP
+run of the 79 backend-facing tests (API, security, privacy, observability,
+performance and frontend/dashboard API contracts) against the isolated final
+image returned **43 passed, 6 failed, 29 setup errors and 1 explicitly skipped**
+in 12.64 seconds. The supplied tests were not modified.
+
+Of the setup errors, 28 originate from `tests/conftest.py` sending unsupported
+course `require_device_binding`; one device fixture omits the required public
+key and sends unsupported `browser`. The six failed assertions expect alternate
+overview fields, a paginated flagged-checkin response instead of the documented
+array, `/audit/summary`, an admin inventory at `GET /devices/`, or unauthenticated
+access to courses (two cases). These discrepancies require public-test contract
+reconciliation; they are not covered by the green backend-local suite.
+Many downstream workflow assertions therefore never ran in this public pass.
+The one skip is the supplied concurrent-checkin test's unconditional skip.
+The 18 face-service/integration tests were not run in this follow-up.
+JUnit evidence: `tmp/backend-public-tests-final.xml`; output:
+`tmp/backend-public-tests-final.txt`. A passing public-suite score is not claimed.
 
 ## Deferrals and unresolved required verification
 

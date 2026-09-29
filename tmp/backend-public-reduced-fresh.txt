@@ -1,0 +1,37 @@
+.........................................s.........................      [100%]
+- generated xml file: C:\Users\Lenovo\Desktop\Study\SC3099\student-starter\tmp\backend-public-reduced-fresh.xml -
+=============================== SCORING SUMMARY ===============================
+
+  test_api_functional.py: 28.0/28.0 pts (16/16 tests)
+  test_integration.py: 4.0/4.0 pts (3/3 tests)
+  test_observability.py: 12.0/12.0 pts (12/12 tests)
+  test_performance.py: 5.0/5.0 pts (7/7 tests)
+  test_privacy_basic.py: 8.0/8.0 pts (8/8 tests)
+  test_security_basic.py: 12.0/12.0 pts (12/12 tests)
+
+--------------------------------------  ---------------------------------------
+  By Category:
+    auth_security: 4.0/4.0 pts
+    authentication: 5.0/5.0 pts
+    authorization: 4.0/4.0 pts
+    checkin: 8.0/8.0 pts
+    concurrency: 1.0/1.0 pts
+    consent: 3.0/3.0 pts
+    courses: 4.0/4.0 pts
+    data_minimization: 3.0/3.0 pts
+    data_retention: 2.0/2.0 pts
+    db_optimization: 1.0/1.0 pts
+    devices: 2.0/2.0 pts
+    input_validation: 3.0/3.0 pts
+    integration: 2.0/2.0 pts
+    latency: 3.0/3.0 pts
+    observability_bonus: 12.0/12.0 pts
+    performance: 2.0/2.0 pts
+    rate_limiting: 1.0/1.0 pts
+    sessions: 4.0/4.0 pts
+    user_management: 5.0/5.0 pts
+
+  TOTAL SCORE: 69.0/69.0 (100.0%)
+  LETTER GRADE: A
+======================================  =======================================
+66 passed, 1 skipped in 14.23s

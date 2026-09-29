@@ -137,7 +137,7 @@ def test_user_visibility_admin_updates_and_face_hash_only(compliance_api, monkey
     ).status_code == 200
     assert client.get(
         f"/api/v1/users/{ids['student2']}", headers={"x-test-user": "instructor"}
-    ).status_code == 403
+    ).status_code == 200
     with Session(engine) as database:
         student = database.get(User, ids["student"])
         student.failed_login_attempts = 10

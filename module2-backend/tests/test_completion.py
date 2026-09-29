@@ -29,7 +29,7 @@ def test_network_hint_uses_words_and_preserves_private_ip(api, ready, agent, exp
 
 
 @pytest.mark.parametrize("displacement,elapsed,accuracy,flagged", [(.005,1,10,False),(.02,5,10,True),
-    (.02,60,10,False),(.02,-1,10,True),(.02,5,2000,False)])
+    (.02,60,10,False),(.02,-1,10,True),(.02,5,2000,False),(.02,5,None,False)])
 def test_impossible_travel_boundaries_flag_without_rejection(api, ready, displacement, elapsed, accuracy, flagged):
     first = api.request("POST", "/checkins/", "student", json=checkin_payload(ready))
     assert first.status_code == 201
@@ -186,7 +186,7 @@ def test_used_session_cannot_be_deleted_after_admin_reset(api, ready):
         assert database.scalar(select(Checkin.id)) is not None
 
 
-def test_session_teacher_can_read_student_but_only_taught_courses(api, session, enrollment):
+def test_session_teacher_can_read_all_student_courses(api, session, enrollment):
     with api.database() as db:
         db.get(Course, session["course_id"]).instructor_id = None
         other = Course(code="OTHER", name="Other", semester="AY26", instructor_id=api.users["other_instructor"].id)
@@ -198,7 +198,7 @@ def test_session_teacher_can_read_student_but_only_taught_courses(api, session, 
     assert api.request("GET", f"/users/{sid}").status_code == 200
     report = api.request("GET", f"/stats/students/{sid}")
     assert report.status_code == 200, report.text
-    assert [item["course_code"] for item in report.json()["courses"]] == ["SC3099"]
+    assert [item["course_code"] for item in report.json()["courses"]] == ["OTHER", "SC3099"]
     assert api.request("GET", f"/users/{sid}", "other_student").status_code == 403
     assert len(api.request("GET", f"/stats/students/{sid}", "admin").json()["courses"]) == 2
 

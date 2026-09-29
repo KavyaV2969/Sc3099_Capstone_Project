@@ -44,7 +44,7 @@ def course_enrollments(course_id: UUID4, is_active: bool = True, search: str | N
                        current_user: User = Depends(require_roles(UserRole.INSTRUCTOR, UserRole.TA, UserRole.ADMIN)),
                        database: Session = Depends(get_db)):
     course = get_course_or_404(database, str(course_id))
-    require_course_access(database, course, current_user, allow_ta=True)
+    require_course_access(database, course, current_user, allow_ta=True, read_only=True)
     query = select(Enrollment, User).join(User, Enrollment.student_id == User.id).where(
         Enrollment.course_id == course.id, Enrollment.is_active == is_active)
     if search:

@@ -2,7 +2,7 @@
 
 Implementation baseline: 29 September 2026; current working tree includes the
 earlier database/verification repairs. No existing integration data is reset.
-Authority remains Grading > Security > API > recommended design > PDFs.
+Authority remains Grading > Security > API > recommended design > PDFs except for the explicit user-approved public contract reductions below.
 
 Every outstanding audit requirement is mapped below before implementation.
 All required backend implementation rows are now complete. The deployment row's
@@ -12,7 +12,7 @@ external dependency is available. Detailed evidence is in the [final report](../
 | Outstanding requirement | Finding | Implementation | Required regression evidence | State |
 |---|---|---|---|---|
 | Registration conflicts | R04 | Protect flush/commit | duplicate race and rollback | Complete |
-| Profile/student permissions | R01 | Shared taught-course scope | session-only and unrelated course | Complete |
+| Profile/student permissions | R01 | All student reads; taught-course writes | unrelated read/write separation | Complete |
 | Session lifecycle | R04 | Guard used-session deletion | admin reset with attendance | Complete |
 | Enrollment/rosters | R04/R05 | Shared eligibility and savepoints | races/inactive course | Complete |
 | Bulk enrollment/accounts | R05 | Single-use activation | creation/expiry/replay/partial success | Complete |
@@ -35,14 +35,58 @@ external dependency is available. Detailed evidence is in the [final report](../
 | Metrics | R13 | Prometheus integration names | scrape/counts/bounded labels | Complete |
 | Deployment/release | R03/R12/R13 | Private config/roles/image/rehearsal | healthy image, migrations/recovery, restricted roles, 10/100-user HTTP | Backend complete; real face gate deferred by user |
 
+## Approved public contract reductions
+
+The user explicitly approved these exceptions after the original reconciliation;
+unchanged Module 2 public tests take precedence only in these conflicts. They do
+not imply that contradictory historical requirements are simultaneously satisfied.
+No external test, fixture, scoring hook or other module is modified.
+
+| Contract | Current behavior | Historical requirement superseded |
+|---|---|---|
+| GPS accuracy | Omitted/null remains null; supplied finite >=0; unknown adds 0.25 geo risk capped at 1; travel needs both known radii | Mandatory measured accuracy |
+| GPS permission | Coordinate submission permits only that attendance attempt; stored preference unchanged | Stored consent had to be true first |
+| Liveness | Session flag AND camera consent AND nonblank image; otherwise no call/null results/zero unchanged weight | Every enabled session flag demanded image/consent |
+| Face matching | Required consent, enrolled hash and image; failed checks reject; invalid/outage controlled errors | Unchanged |
+| Device inventory | Optional/null key; bounded browser ignored; omit preserves existing key, null removes/clears trust | Mandatory registration key |
+| Instructor reads | All student profiles, statistics, enrollment/attendance lists and exports; writes/reviews still taught-course/owner scoped | Taught-course-only reads |
+| Courses list | Public metadata and instructor filter; newest creation first, then ID; bounded pages | Authenticated list/admin-only instructor filter |
+| Flagged list | `items`, `total`, `limit`, `offset`; matching count before pagination; TA scope retained | Array response |
+
+Accuracy revision `20260929_0009` follows `0008`, relaxes only the existing column
+and retains its nonnegative check. Downgrade refuses null rows instead of fabricating
+measurements. The frozen head contract comes from an independently migrated empty
+PostgreSQL database. Recovery still verifies the historical `20260928_0006` base.
+
+Signing includes all normalized check-in fields; omitted accuracy becomes null,
+so omission and explicit null produce the same payload digest. Signatures remain
+base64 P1363 ECDSA (64 bytes) or base64 RSA PKCS#1 v1.5/SHA-256 as documented below.
+A keyless device challenge returns 400; no server-generated credentials are used.
+
+```json
+{"session_id":"uuid","latitude":1.3483,"longitude":103.6831,"device_fingerprint":"browser"}
+```
+
+This minimal authenticated attendance request skips liveness unless usable consented
+image evidence is supplied and still enforces any required face matching.
+
+```json
+{"items":[],"total":0,"limit":50,"offset":0}
+```
+
+This is the canonical flagged-list envelope; consumers must read `items`.
+Latest release verification is recorded in the
+[reduced-contract report](../output/backend-reduced-contract-2026-09-29.md).
+Real biometric interoperability remains deferred until a functioning service exists.
+
 ## Agreed defaults
 
-Instructors see taught courses only. Activation expires in 24 hours, device
+Instructors read all student/course data; writes and reviews retain teaching/ownership restrictions. Activation expires in 24 hours, device
 challenges in 120 seconds. Unsigned attendance remains supported with unknown
 device risk. Approved attendance uses a retained historical roster. Detail is
 limited to 30 days; unknown history is never silently classified as absence.
 Impossible travel flags (not rejects) after >=1 km displacement and >100 m/s
-after subtracting both accuracy radii. GPS storage precision is four decimals.
+after subtracting both known accuracy radii. Unknown radii skip travel inference. GPS storage precision is four decimals.
 
 ## External gate and optional work
 
@@ -52,7 +96,7 @@ dependency; mock tests cannot certify real integration readiness.
 Optional QR issuance, standalone attestation, duplicate risk_signals storage,
 extra recommended metadata, email delivery, refresh rotation/logout, paid network
 reputation, and full OTLP tracing are intentionally deferred. Backend metrics and
-request correlation are required. Existing verification flags are not weakened.
+request correlation are required. Required face matching stays strict; optional liveness follows the approved submission policy.
 
 ## Consumer requests and retry behavior
 
@@ -149,10 +193,10 @@ sessions whose window has not opened, uses scheduled session dates in
 Asia/Singapore, and stores timestamps in UTC. End date defaults to today.
 `coverage` discloses supported start/end, cutoff, retention clamping and
 `denominator_available`. Unknown denominators produce null rates, never absence.
-Course/current enrollment counts remain current-state data. Student historical
-statistics remain accessible within taught courses after withdrawal while
-retained roster/check-in evidence exists. Profiles still require the documented
-current enrollment relationship. Unrelated courses remain inaccessible.
+Course/current enrollment counts remain current-state data. Instructors/admins
+read all students, including empty statistics and profiles without enrollment.
+Retained historical reports survive withdrawal. TA course permissions remain
+assignment-scoped; this instructor read scope grants no unrelated writes.
 
 Reports are bounded to 1,000 sessions, 10,000 check-ins and 10,000 students;
 student reports allow 100 courses. Narrow the range on 422. CSV exports stream
@@ -218,7 +262,7 @@ with matching user-before-session/device ordering, to prevent overlapping runs.
 The VPN/proxy hint checks user-agent words only; it cannot establish actual VPN
 use. Private/local IPs retain the grading exception. Impossible travel uses the
 last retained approved location, >=1 km displacement and >100 m/s after both
-accuracy radii; nonpositive elapsed time is suspicious. It flags review without
+known accuracy radii; if either radius is unknown no travel inference is made. Nonpositive elapsed time is suspicious. It flags review without
 overriding critical rejection. The bundled Singapore map is a fixed snapshot,
 not a live territorial dataset.
 
@@ -253,7 +297,7 @@ certify face capabilities. Configure `FACE_SERVICE_URL` to a functioning
 implementation. Enabled biometric policies remain enabled when it is missing.
 The production image includes canonical/legacy migrations, contracts and
 recovery tooling; run isolated backup/restore and the strict verifier before
-deployment. Migration scripts `0007`/`0008` are forward-only additions; historical
+deployment. Migration scripts `0007`/`0008`/`0009` are forward additions; historical
 recovery/provenance remain untouched. Backup dumps and private role URLs stay
 ignored and must be handled as sensitive operator material.
 
@@ -317,3 +361,38 @@ cases cover migration/recovery/drift and final eligibility races; none are
 replaced by mock evidence. Final counts and reproducible release/load results
 are recorded in the linked completion report.
 
+
+## Public-test compatibility additions — 29 September 2026
+
+The supplied public tests remain unchanged at the user's request. The grading
+clarifications govern except for the explicit user-approved reductions below. Active eligibility, cryptographic validation of supplied keys and required face evidence remain enforced.
+
+- Course creation accepts legacy `require_device_binding: true` as an affirmation
+  of the mandatory device risk signal. It is excluded from persistence/responses;
+  false is rejected with 422, so this field cannot disable device assessment.
+- `POST /devices/` aliases `POST /devices/register` with identical validation,
+  ownership, revocation and auditing. Public keys are optional inventory credentials; supplied keys remain validated.
+- `GET /devices/` is admin-only, with `items`, `total`, `limit`, `offset`; limit
+  defaults to and cannot exceed 100. It uses existing device representations.
+- `GET /audit/summary?days=7` is admin-only. Days is 1–365. It returns
+  `period_days`, `total_logs`, and `by_action` (action-to-count mapping) for the
+  rolling UTC interval ending now. This is read-only aggregate audit evidence.
+- Overview adds `total_courses` (active visible courses) and `total_students`
+  (distinct active students with active enrollment in those courses), plus aliases
+  `today_checkins=total_checkins_today`, `flagged_pending=flagged_pending_review`.
+- Session analytics adds `checked_in_count=checked_in`, `approved_count` and
+  `flagged_count` from the corresponding retained submission status counts.
+  These submission counts are distinct from roster-qualified approved attendance.
+- Course analytics adds `average_attendance_rate=overall_attendance_rate` and
+  `flagged_checkins` (retained submissions with status flagged).
+- Student analytics adds scoped `total_enrolled_courses` (current active enrollment
+  count), `total_sessions` (retained eligible session slots), `attended_sessions`
+  (approved eligible slots), their weighted `attendance_rate` (null if historical
+  denominators are unavailable), and `recent_sessions=recent_checkins`.
+- Session JSON export adds top-level `session_id` and `records=checkins` while
+  preserving the existing summary, records and coverage semantics.
+
+`GET /checkins/flagged` now uses `CheckinListResponse`; the course catalogue is public. These intentional exceptions replace the previous array/authentication requirements.
+Consumer compatibility regression cases are in `tests/test_public_compatibility.py`;
+exact public results/conflicts are in the
+[public-test reconciliation report](../output/backend-public-test-reconciliation-2026-09-29.md).

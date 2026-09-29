@@ -38,7 +38,7 @@ def _reject(database: Session, request: Request, user_id: str, session_id: str, 
     raise HTTPException(status_code=code, detail=detail, headers=headers)
 
 
-def _validate_eligibility(database: Session, session: AttendanceSession, user: User, payload: CheckinCreate) -> None:
+def _validate_eligibility(database: Session, session: AttendanceSession, user: User, payload: CheckinCreate) -> bool:
     if not user.is_active:
         raise HTTPException(status_code=401, detail="account is unavailable")
     if user.role != "student":
@@ -56,18 +56,18 @@ def _validate_eligibility(database: Session, session: AttendanceSession, user: U
         Enrollment.is_active.is_(True)))
     if enrolled is None:
         raise HTTPException(status_code=403, detail="active enrollment is required")
-    if not user.geolocation_consent:
-        raise HTTPException(status_code=403, detail="geolocation consent is required")
-    if (session.require_liveness_check or session.require_face_match) and not user.camera_consent:
+    if session.require_face_match and not user.camera_consent:
         raise HTTPException(status_code=403, detail="camera consent is required")
     if session.require_face_match and not (user.face_enrolled and user.face_embedding_hash):
         raise HTTPException(status_code=400, detail="face enrollment is required")
-    if (session.require_liveness_check or session.require_face_match) and not (
+    if session.require_face_match and not (
         payload.liveness_challenge_response and payload.liveness_challenge_response.strip()
     ):
         raise HTTPException(status_code=400, detail="face image is required")
     if not is_in_singapore(payload.latitude, payload.longitude):
         raise HTTPException(status_code=403, detail="check-ins must be within Singapore")
+    return bool(session.require_liveness_check and user.camera_consent
+                and payload.liveness_challenge_response and payload.liveness_challenge_response.strip())
 
 
 @dataclass(frozen=True)
@@ -111,12 +111,12 @@ def _prepare(payload: CheckinCreate, request: Request, current_user: User,
     try:
         enforce_checkin_limit(current_user.id)
         session = get_session(database, session_id)
-        _validate_eligibility(database, session, current_user, payload)
+        evaluate_liveness = _validate_eligibility(database, session, current_user, payload)
         if database.scalar(select(Checkin.id).where(Checkin.student_id == current_user.id,
                                                      Checkin.session_id == session.id)):
             raise HTTPException(status_code=400, detail="already checked in")
         policy = VerificationPolicy(user_id, session_id, session.course_id,
-                                    session.require_liveness_check, session.require_face_match,
+                                    evaluate_liveness, session.require_face_match,
                                     current_user.face_embedding_hash if session.require_face_match else None)
         device = database.scalar(select(Device).where(Device.user_id == user_id,
             Device.device_fingerprint == payload.device_fingerprint, Device.is_active.is_(True)))
@@ -146,7 +146,6 @@ def _finalize(policy: VerificationPolicy, biometric: tuple, payload: CheckinCrea
         if session is None:
             raise HTTPException(status_code=404, detail="session not found")
         if (session.course_id != policy.course_id
-            or session.require_liveness_check != policy.require_liveness
             or session.require_face_match != policy.require_face
             or (policy.require_face and current_user.face_embedding_hash != policy.reference_hash)):
             raise HTTPException(status_code=409, detail="verification policy changed; submit a new check-in")
@@ -156,7 +155,9 @@ def _finalize(policy: VerificationPolicy, biometric: tuple, payload: CheckinCrea
                              Enrollment.course_id == policy.course_id)
         if enrollment is None or not enrollment.is_active:
             raise HTTPException(status_code=403, detail="active enrollment is required")
-        _validate_eligibility(database, session, current_user, payload)
+        evaluate_liveness = _validate_eligibility(database, session, current_user, payload)
+        if evaluate_liveness != policy.require_liveness:
+            raise HTTPException(status_code=409, detail="verification policy changed; submit a new check-in")
         if database.scalar(select(Checkin.id).where(Checkin.student_id == current_user.id,
                                                      Checkin.session_id == session.id)):
             raise HTTPException(status_code=400, detail="already checked in")
@@ -181,7 +182,7 @@ def _finalize(policy: VerificationPolicy, biometric: tuple, payload: CheckinCrea
         Checkin.status == "approved", Checkin.scheduled_deletion_at > utc_now())
         .order_by(Checkin.checked_in_at.desc()).limit(1))
     travel = False
-    if previous:
+    if previous and previous.location_accuracy_meters is not None and payload.location_accuracy_meters is not None:
         displacement = haversine_distance(payload.latitude, payload.longitude, previous.latitude, previous.longitude)
         elapsed = (utc_now() - as_utc(previous.checked_in_at)).total_seconds()
         certain_distance = max(0, displacement - previous.location_accuracy_meters - payload.location_accuracy_meters)
@@ -266,7 +267,7 @@ def list_checkins(
     database: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.INSTRUCTOR, UserRole.ADMIN))):
     query = checkin_query()
-    if user.role == "instructor": query = query.where(Course.id.in_(accessible_course_ids(user)))
+    if user.role == "instructor": query = query.where(Course.id.in_(accessible_course_ids(user, read_only=True)))
     if session_id: query = query.where(Checkin.session_id == str(session_id))
     if course_id: query = query.where(Course.id == str(course_id))
     if student_id: query = query.where(Checkin.student_id == str(student_id))
@@ -295,13 +296,13 @@ def session_checkins(session_id: UUID4, limit: int = Query(100, ge=1, le=100),
                      offset: int = Query(0, ge=0), database: Session = Depends(get_db),
                      user: User = Depends(require_roles(UserRole.INSTRUCTOR, UserRole.TA, UserRole.ADMIN))):
     session = get_session(database, str(session_id))
-    require_session_access(database, session, user)
+    require_session_access(database, session, user, read_only=True)
     return [serialize_checkin(row) for row in database.execute(
         checkin_query().where(Checkin.session_id == session.id).order_by(Checkin.checked_in_at, Checkin.id)
         .limit(limit).offset(offset)).all()]
 
 
-@router.get("/flagged", response_model=list[CheckinResponse])
+@router.get("/flagged", response_model=CheckinListResponse)
 def flagged_checkins(course_id: UUID4 | None = None, session_id: UUID4 | None = None,
                      limit: int = Query(default=50, ge=1, le=100),
                      offset: int = Query(0, ge=0),
@@ -309,20 +310,22 @@ def flagged_checkins(course_id: UUID4 | None = None, session_id: UUID4 | None = 
                      user: User = Depends(require_roles(UserRole.INSTRUCTOR, UserRole.TA, UserRole.ADMIN))):
     query = checkin_query().where(Checkin.status.in_(("flagged", "appealed")))
     if user.role == "instructor":
-        query = query.where(Course.id.in_(accessible_course_ids(user)))
+        query = query.where(Course.id.in_(accessible_course_ids(user, read_only=True)))
     elif user.role == "ta":
         from app.models import CourseTA
         query = query.join(CourseTA, CourseTA.course_id == Course.id).where(CourseTA.ta_id == user.id)
     if course_id: query = query.where(Course.id == str(course_id))
     if session_id: query = query.where(Checkin.session_id == str(session_id))
-    return [serialize_checkin(row) for row in database.execute(query.order_by(Checkin.checked_in_at, Checkin.id).limit(limit).offset(offset)).all()]
+    total = database.scalar(select(func.count()).select_from(query.subquery())) or 0
+    rows = database.execute(query.order_by(Checkin.checked_in_at, Checkin.id).limit(limit).offset(offset)).all()
+    return {"items": [serialize_checkin(row) for row in rows], "total": total, "limit": limit, "offset": offset}
 
 
 @router.get("/{checkin_id}", response_model=CheckinResponse)
 def checkin_detail(checkin_id: UUID4, database: Session = Depends(get_db),
                    user: User = Depends(get_current_user)):
     checkin = get_checkin(database, str(checkin_id))
-    require_checkin_access(database, checkin, user)
+    require_checkin_access(database, checkin, user, read_only=True)
     return serialize_checkin(database.execute(checkin_query().where(Checkin.id == checkin.id)).one())
 
 

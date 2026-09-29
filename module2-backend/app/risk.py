@@ -27,21 +27,22 @@ def _biometric_risk(required: bool, score: float | None, passed: bool | None, cu
 
 
 def assess_risk(
-    *, distance: float, radius: float, location_accuracy: float,
+    *, distance: float, radius: float, location_accuracy: float | None,
     require_liveness: bool, require_face: bool,
     liveness_score: float | None, liveness_passed: bool | None,
     face_score: float | None, face_passed: bool | None,
     known_device: bool, trusted_device: bool, local_network: bool,
     threshold: float, network_risk: float | None = None, impossible_travel: bool = False,
 ) -> RiskDecision:
-    if not all(isfinite(v) for v in (distance, radius, location_accuracy, threshold)) or (
-        distance < 0 or radius <= 0 or location_accuracy < 0 or not 0 <= threshold <= 1
+    if not all(isfinite(v) for v in (distance, radius, threshold)) or (
+        distance < 0 or radius <= 0 or not 0 <= threshold <= 1
+        or (location_accuracy is not None and (not isfinite(location_accuracy) or location_accuracy < 0))
     ):
         raise ValueError("invalid risk inputs")
     geo_risk = min(1.0, distance / radius)
     if network_risk is not None and (not isfinite(network_risk) or not 0 <= network_risk <= 1):
         raise ValueError("invalid network signal")
-    if location_accuracy > radius:
+    if location_accuracy is None or location_accuracy > radius:
         geo_risk = min(1.0, geo_risk + .25)
     signals = {
         "liveness": _biometric_risk(require_liveness, liveness_score, liveness_passed, .6),

@@ -102,7 +102,7 @@ def get_user(
         raise HTTPException(status_code=404, detail="user not found")
     allowed = current_user.id == user.id or current_user.role == "admin"
     if current_user.role == "instructor" and current_user.id != user.id:
-        allowed = instructor_has_student_relationship(database, current_user, user.id)
+        allowed = instructor_has_student_relationship(database, current_user, user.id, read_only=True)
     if not allowed:
         raise HTTPException(status_code=403, detail="insufficient permissions")
     return user

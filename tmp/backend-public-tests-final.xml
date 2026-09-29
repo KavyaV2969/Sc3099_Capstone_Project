@@ -1,0 +1,220 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="29" failures="6" skipped="1" tests="79" time="12.635" timestamp="2026-09-29T17:09:19.238902" hostname="LAPTOP-JI1RT46T"><testcase classname="tests.public.test_api_functional.TestAuthentication" name="test_user_registration" time="0.632" /><testcase classname="tests.public.test_api_functional.TestAuthentication" name="test_duplicate_registration_fails" time="0.095" /><testcase classname="tests.public.test_api_functional.TestAuthentication" name="test_user_login_success" time="0.149" /><testcase classname="tests.public.test_api_functional.TestAuthentication" name="test_login_wrong_password_fails" time="0.137" /><testcase classname="tests.public.test_api_functional.TestAuthentication" name="test_token_refresh" time="0.144" /><testcase classname="tests.public.test_api_functional.TestUserManagement" name="test_get_current_user" time="0.140" /><testcase classname="tests.public.test_api_functional.TestUserManagement" name="test_update_user_profile" time="0.156" /><testcase classname="tests.public.test_api_functional.TestUserManagement" name="test_unauthorized_access_fails" time="0.007" /><testcase classname="tests.public.test_api_functional.TestCourseManagement" name="test_list_courses" time="0.149"><error message="failed on setup with &quot;Failed: &#10;&#10;Cannot create test course.&#10;Status: 422&#10;Response: {&quot;detail&quot;:[{&quot;type&quot;:&quot;extra_forbidden&quot;,&quot;loc&quot;:[&quot;body&quot;,&quot;require_device_binding&quot;],&quot;msg&quot;:&quot;Extra inputs are not permitted&quot;,&quot;url&quot;:&quot;https://errors.pydantic.dev/2.5/v/extra_forbidden&quot;}]}&#10;To fix: Implement POST /api/v1/courses/ endpoint.&quot;">tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.</error></testcase><testcase classname="tests.public.test_api_functional.TestCourseManagement" name="test_get_course_details" time="0.154"><error message="failed on setup with &quot;Failed: &#10;&#10;Cannot create test course.&#10;Status: 422&#10;Response: {&quot;detail&quot;:[{&quot;type&quot;:&quot;extra_forbidden&quot;,&quot;loc&quot;:[&quot;body&quot;,&quot;require_device_binding&quot;],&quot;msg&quot;:&quot;Extra inputs are not permitted&quot;,&quot;url&quot;:&quot;https://errors.pydantic.dev/2.5/v/extra_forbidden&quot;}]}&#10;To fix: Implement POST /api/v1/courses/ endpoint.&quot;">tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.</error></testcase><testcase classname="tests.public.test_api_functional.TestSessionManagement" name="test_list_active_sessions" time="0.146"><error message="failed on setup with &quot;Failed: &#10;&#10;Cannot create test course.&#10;Status: 422&#10;Response: {&quot;detail&quot;:[{&quot;type&quot;:&quot;extra_forbidden&quot;,&quot;loc&quot;:[&quot;body&quot;,&quot;require_device_binding&quot;],&quot;msg&quot;:&quot;Extra inputs are not permitted&quot;,&quot;url&quot;:&quot;https://errors.pydantic.dev/2.5/v/extra_forbidden&quot;}]}&#10;To fix: Implement POST /api/v1/courses/ endpoint.&quot;">tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.</error></testcase><testcase classname="tests.public.test_api_functional.TestSessionManagement" name="test_get_session_details" time="0.152"><error message="failed on setup with &quot;Failed: &#10;&#10;Cannot create test course.&#10;Status: 422&#10;Response: {&quot;detail&quot;:[{&quot;type&quot;:&quot;extra_forbidden&quot;,&quot;loc&quot;:[&quot;body&quot;,&quot;require_device_binding&quot;],&quot;msg&quot;:&quot;Extra inputs are not permitted&quot;,&quot;url&quot;:&quot;https://errors.pydantic.dev/2.5/v/extra_forbidden&quot;}]}&#10;To fix: Implement POST /api/v1/courses/ endpoint.&quot;">tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.</error></testcase><testcase classname="tests.public.test_api_functional.TestCheckInWorkflow" name="test_successful_checkin" time="0.197"><error message="failed on setup with &quot;Failed: &#10;&#10;Cannot create test course.&#10;Status: 422&#10;Response: {&quot;detail&quot;:[{&quot;type&quot;:&quot;extra_forbidden&quot;,&quot;loc&quot;:[&quot;body&quot;,&quot;require_device_binding&quot;],&quot;msg&quot;:&quot;Extra inputs are not permitted&quot;,&quot;url&quot;:&quot;https://errors.pydantic.dev/2.5/v/extra_forbidden&quot;}]}&#10;To fix: Implement POST /api/v1/courses/ endpoint.&quot;">tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.</error></testcase><testcase classname="tests.public.test_api_functional.TestCheckInWorkflow" name="test_duplicate_checkin_fails" time="0.191"><error message="failed on setup with &quot;Failed: &#10;&#10;Cannot create test course.&#10;Status: 422&#10;Response: {&quot;detail&quot;:[{&quot;type&quot;:&quot;extra_forbidden&quot;,&quot;loc&quot;:[&quot;body&quot;,&quot;require_device_binding&quot;],&quot;msg&quot;:&quot;Extra inputs are not permitted&quot;,&quot;url&quot;:&quot;https://errors.pydantic.dev/2.5/v/extra_forbidden&quot;}]}&#10;To fix: Implement POST /api/v1/courses/ endpoint.&quot;">tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.</error></testcase><testcase classname="tests.public.test_api_functional.TestCheckInWorkflow" name="test_list_my_checkins" time="0.182"><error message="failed on setup with &quot;Failed: &#10;&#10;Cannot create test course.&#10;Status: 422&#10;Response: {&quot;detail&quot;:[{&quot;type&quot;:&quot;extra_forbidden&quot;,&quot;loc&quot;:[&quot;body&quot;,&quot;require_device_binding&quot;],&quot;msg&quot;:&quot;Extra inputs are not permitted&quot;,&quot;url&quot;:&quot;https://errors.pydantic.dev/2.5/v/extra_forbidden&quot;}]}&#10;To fix: Implement POST /api/v1/courses/ endpoint.&quot;">tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.</error></testcase><testcase classname="tests.public.test_api_functional.TestDeviceManagement" name="test_list_my_devices" time="0.130"><error message="failed on setup with &quot;Failed: &#10;&#10;Cannot register test device.&#10;Status: 422&#10;Response: {&quot;detail&quot;:[{&quot;type&quot;:&quot;missing&quot;,&quot;loc&quot;:[&quot;body&quot;,&quot;public_key&quot;],&quot;msg&quot;:&quot;Field required&quot;,&quot;url&quot;:&quot;https://errors.pydantic.dev/2.5/v/missing&quot;},{&quot;type&quot;:&quot;extra_forbidden&quot;,&quot;loc&quot;:[&quot;body&quot;,&quot;browser&quot;],&quot;msg&quot;:&quot;Extra inputs are not permitted&quot;,&quot;url&quot;:&quot;https://errors.pydantic.dev/2.5/v/extra_forbidden&quot;}]}&#10;To fix: Implement POST /api/v1/devices/ or /api/v1/devices/register endpoint.&quot;">tests\conftest.py:487: in test_device
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot register test device.
+E   Status: 422
+E   Response: {"detail":[{"type":"missing","loc":["body","public_key"],"msg":"Field required","url":"https://errors.pydantic.dev/2.5/v/missing"},{"type":"extra_forbidden","loc":["body","browser"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/devices/ or /api/v1/devices/register endpoint.</error></testcase><testcase classname="tests.public.test_security_basic.TestAuthenticationSecurity" name="test_weak_password_rejected" time="0.007" /><testcase classname="tests.public.test_security_basic.TestAuthenticationSecurity" name="test_password_not_in_response" time="0.122" /><testcase classname="tests.public.test_security_basic.TestAuthenticationSecurity" name="test_invalid_token_rejected" time="0.008" /><testcase classname="tests.public.test_security_basic.TestAuthenticationSecurity" name="test_expired_token_rejected" time="0.006" /><testcase classname="tests.public.test_security_basic.TestAuthorizationControls" name="test_student_cannot_access_instructor_endpoints" time="0.184"><error message="failed on setup with &quot;Failed: &#10;&#10;Cannot create test course.&#10;Status: 422&#10;Response: {&quot;detail&quot;:[{&quot;type&quot;:&quot;extra_forbidden&quot;,&quot;loc&quot;:[&quot;body&quot;,&quot;require_device_binding&quot;],&quot;msg&quot;:&quot;Extra inputs are not permitted&quot;,&quot;url&quot;:&quot;https://errors.pydantic.dev/2.5/v/extra_forbidden&quot;}]}&#10;To fix: Implement POST /api/v1/courses/ endpoint.&quot;">tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.</error></testcase><testcase classname="tests.public.test_security_basic.TestAuthorizationControls" name="test_instructor_can_view_session_checkins" time="0.229"><error message="failed on setup with &quot;Failed: &#10;&#10;Cannot create test course.&#10;Status: 422&#10;Response: {&quot;detail&quot;:[{&quot;type&quot;:&quot;extra_forbidden&quot;,&quot;loc&quot;:[&quot;body&quot;,&quot;require_device_binding&quot;],&quot;msg&quot;:&quot;Extra inputs are not permitted&quot;,&quot;url&quot;:&quot;https://errors.pydantic.dev/2.5/v/extra_forbidden&quot;}]}&#10;To fix: Implement POST /api/v1/courses/ endpoint.&quot;">tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.</error></testcase><testcase classname="tests.public.test_security_basic.TestAuthorizationControls" name="test_non_admin_cannot_access_audit_logs" time="0.147" /><testcase classname="tests.public.test_security_basic.TestAuthorizationControls" name="test_inactive_user_cannot_login" time="0.269" /><testcase classname="tests.public.test_security_basic.TestInputValidation" name="test_invalid_email_rejected" time="0.006" /><testcase classname="tests.public.test_security_basic.TestInputValidation" name="test_sql_injection_prevented" time="0.133" /><testcase classname="tests.public.test_security_basic.TestInputValidation" name="test_xss_payload_sanitized" time="0.129" /><testcase classname="tests.public.test_security_basic.TestRateLimiting" name="test_login_rate_limiting" time="0.716" /><testcase classname="tests.public.test_privacy_basic.TestConsentManagement" name="test_camera_consent_required" time="0.120" /><testcase classname="tests.public.test_privacy_basic.TestConsentManagement" name="test_geolocation_consent_required" time="0.120" /><testcase classname="tests.public.test_privacy_basic.TestConsentManagement" name="test_consent_can_be_updated" time="0.125" /><testcase classname="tests.public.test_privacy_basic.TestDataMinimization" name="test_no_raw_face_images_in_checkin_response" time="0.175"><error message="failed on setup with &quot;Failed: &#10;&#10;Cannot create test course.&#10;Status: 422&#10;Response: {&quot;detail&quot;:[{&quot;type&quot;:&quot;extra_forbidden&quot;,&quot;loc&quot;:[&quot;body&quot;,&quot;require_device_binding&quot;],&quot;msg&quot;:&quot;Extra inputs are not permitted&quot;,&quot;url&quot;:&quot;https://errors.pydantic.dev/2.5/v/extra_forbidden&quot;}]}&#10;To fix: Implement POST /api/v1/courses/ endpoint.&quot;">tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.</error></testcase><testcase classname="tests.public.test_privacy_basic.TestDataMinimization" name="test_only_face_embedding_hash_stored" time="0.185"><error message="failed on setup with &quot;Failed: &#10;&#10;Cannot create test course.&#10;Status: 422&#10;Response: {&quot;detail&quot;:[{&quot;type&quot;:&quot;extra_forbidden&quot;,&quot;loc&quot;:[&quot;body&quot;,&quot;require_device_binding&quot;],&quot;msg&quot;:&quot;Extra inputs are not permitted&quot;,&quot;url&quot;:&quot;https://errors.pydantic.dev/2.5/v/extra_forbidden&quot;}]}&#10;To fix: Implement POST /api/v1/courses/ endpoint.&quot;">tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.</error></testcase><testcase classname="tests.public.test_privacy_basic.TestDataMinimization" name="test_passwords_not_in_user_response" time="0.121" /><testcase classname="tests.public.test_privacy_basic.TestDataRetention" name="test_user_has_scheduled_deletion_field" time="0.115" /><testcase classname="tests.public.test_privacy_basic.TestDataRetention" name="test_audit_log_endpoint_exists" time="0.127" /><testcase classname="tests.public.test_observability.TestStatsEndpoints" name="test_stats_overview" time="0.131"><failure message="AssertionError: assert 'total_courses' in {'active_sessions': 0, 'approval_rate': 0.0, 'average_attendance_rate': 0.0, 'average_risk_score': 0.0, ...}">tests\public\test_observability.py:29: in test_stats_overview
+    assert "total_courses" in data
+E   AssertionError: assert 'total_courses' in {'active_sessions': 0, 'approval_rate': 0.0, 'average_attendance_rate': 0.0, 'average_risk_score': 0.0, ...}</failure></testcase><testcase classname="tests.public.test_observability.TestStatsEndpoints" name="test_stats_session" time="0.119"><error message="failed on setup with &quot;Failed: &#10;&#10;Cannot create test course.&#10;Status: 422&#10;Response: {&quot;detail&quot;:[{&quot;type&quot;:&quot;extra_forbidden&quot;,&quot;loc&quot;:[&quot;body&quot;,&quot;require_device_binding&quot;],&quot;msg&quot;:&quot;Extra inputs are not permitted&quot;,&quot;url&quot;:&quot;https://errors.pydantic.dev/2.5/v/extra_forbidden&quot;}]}&#10;To fix: Implement POST /api/v1/courses/ endpoint.&quot;">tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.</error></testcase><testcase classname="tests.public.test_observability.TestStatsEndpoints" name="test_stats_course" time="0.120"><error message="failed on setup with &quot;Failed: &#10;&#10;Cannot create test course.&#10;Status: 422&#10;Response: {&quot;detail&quot;:[{&quot;type&quot;:&quot;extra_forbidden&quot;,&quot;loc&quot;:[&quot;body&quot;,&quot;require_device_binding&quot;],&quot;msg&quot;:&quot;Extra inputs are not permitted&quot;,&quot;url&quot;:&quot;https://errors.pydantic.dev/2.5/v/extra_forbidden&quot;}]}&#10;To fix: Implement POST /api/v1/courses/ endpoint.&quot;">tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.</error></testcase><testcase classname="tests.public.test_observability.TestStatsEndpoints" name="test_stats_student" time="0.172"><error message="failed on setup with &quot;Failed: &#10;&#10;Cannot create test course.&#10;Status: 422&#10;Response: {&quot;detail&quot;:[{&quot;type&quot;:&quot;extra_forbidden&quot;,&quot;loc&quot;:[&quot;body&quot;,&quot;require_device_binding&quot;],&quot;msg&quot;:&quot;Extra inputs are not permitted&quot;,&quot;url&quot;:&quot;https://errors.pydantic.dev/2.5/v/extra_forbidden&quot;}]}&#10;To fix: Implement POST /api/v1/courses/ endpoint.&quot;">tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.</error></testcase><testcase classname="tests.public.test_observability.TestSessionManagement" name="test_list_sessions_with_filters" time="0.128"><error message="failed on setup with &quot;Failed: &#10;&#10;Cannot create test course.&#10;Status: 422&#10;Response: {&quot;detail&quot;:[{&quot;type&quot;:&quot;extra_forbidden&quot;,&quot;loc&quot;:[&quot;body&quot;,&quot;require_device_binding&quot;],&quot;msg&quot;:&quot;Extra inputs are not permitted&quot;,&quot;url&quot;:&quot;https://errors.pydantic.dev/2.5/v/extra_forbidden&quot;}]}&#10;To fix: Implement POST /api/v1/courses/ endpoint.&quot;">tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.</error></testcase><testcase classname="tests.public.test_observability.TestSessionManagement" name="test_create_session" time="0.139"><error message="failed on setup with &quot;Failed: &#10;&#10;Cannot create test course.&#10;Status: 422&#10;Response: {&quot;detail&quot;:[{&quot;type&quot;:&quot;extra_forbidden&quot;,&quot;loc&quot;:[&quot;body&quot;,&quot;require_device_binding&quot;],&quot;msg&quot;:&quot;Extra inputs are not permitted&quot;,&quot;url&quot;:&quot;https://errors.pydantic.dev/2.5/v/extra_forbidden&quot;}]}&#10;To fix: Implement POST /api/v1/courses/ endpoint.&quot;">tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.</error></testcase><testcase classname="tests.public.test_observability.TestSessionManagement" name="test_update_session" time="0.131"><error message="failed on setup with &quot;Failed: &#10;&#10;Cannot create test course.&#10;Status: 422&#10;Response: {&quot;detail&quot;:[{&quot;type&quot;:&quot;extra_forbidden&quot;,&quot;loc&quot;:[&quot;body&quot;,&quot;require_device_binding&quot;],&quot;msg&quot;:&quot;Extra inputs are not permitted&quot;,&quot;url&quot;:&quot;https://errors.pydantic.dev/2.5/v/extra_forbidden&quot;}]}&#10;To fix: Implement POST /api/v1/courses/ endpoint.&quot;">tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.</error></testcase><testcase classname="tests.public.test_observability.TestEnrollmentManagement" name="test_list_course_enrollments" time="0.129"><error message="failed on setup with &quot;Failed: &#10;&#10;Cannot create test course.&#10;Status: 422&#10;Response: {&quot;detail&quot;:[{&quot;type&quot;:&quot;extra_forbidden&quot;,&quot;loc&quot;:[&quot;body&quot;,&quot;require_device_binding&quot;],&quot;msg&quot;:&quot;Extra inputs are not permitted&quot;,&quot;url&quot;:&quot;https://errors.pydantic.dev/2.5/v/extra_forbidden&quot;}]}&#10;To fix: Implement POST /api/v1/courses/ endpoint.&quot;">tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.</error></testcase><testcase classname="tests.public.test_observability.TestEnrollmentManagement" name="test_my_enrollments" time="0.191"><error message="failed on setup with &quot;Failed: &#10;&#10;Cannot create test course.&#10;Status: 422&#10;Response: {&quot;detail&quot;:[{&quot;type&quot;:&quot;extra_forbidden&quot;,&quot;loc&quot;:[&quot;body&quot;,&quot;require_device_binding&quot;],&quot;msg&quot;:&quot;Extra inputs are not permitted&quot;,&quot;url&quot;:&quot;https://errors.pydantic.dev/2.5/v/extra_forbidden&quot;}]}&#10;To fix: Implement POST /api/v1/courses/ endpoint.&quot;">tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.</error></testcase><testcase classname="tests.public.test_observability.TestCheckinFiltering" name="test_list_all_checkins" time="0.138" /><testcase classname="tests.public.test_observability.TestCheckinFiltering" name="test_flagged_checkins_queue" time="0.126"><failure message="AssertionError: assert 'items' in []">tests\public\test_observability.py:234: in test_flagged_checkins_queue
+    assert "items" in data
+E   AssertionError: assert 'items' in []</failure></testcase><testcase classname="tests.public.test_observability.TestExportEndpoints" name="test_export_session_attendance_json" time="0.128"><error message="failed on setup with &quot;Failed: &#10;&#10;Cannot create test course.&#10;Status: 422&#10;Response: {&quot;detail&quot;:[{&quot;type&quot;:&quot;extra_forbidden&quot;,&quot;loc&quot;:[&quot;body&quot;,&quot;require_device_binding&quot;],&quot;msg&quot;:&quot;Extra inputs are not permitted&quot;,&quot;url&quot;:&quot;https://errors.pydantic.dev/2.5/v/extra_forbidden&quot;}]}&#10;To fix: Implement POST /api/v1/courses/ endpoint.&quot;">tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.</error></testcase><testcase classname="tests.public.test_observability.TestAuditLogFiltering" name="test_audit_logs_with_filters" time="0.130" /><testcase classname="tests.public.test_observability.TestAuditLogFiltering" name="test_audit_summary" time="0.117"><failure message="assert 404 == 200&#10; +  where 404 = &lt;Response [404 Not Found]&gt;.status_code">tests\public\test_observability.py:293: in test_audit_summary
+    assert response.status_code == 200
+E   assert 404 == 200
+E    +  where 404 = &lt;Response [404 Not Found]&gt;.status_code</failure></testcase><testcase classname="tests.public.test_observability.TestAdminUserEndpoints" name="test_list_users_admin" time="0.126" /><testcase classname="tests.public.test_observability.TestAdminUserEndpoints" name="test_list_users_forbidden_for_instructor" time="0.122" /><testcase classname="tests.public.test_observability.TestCourseManagement" name="test_create_course_admin" time="0.144" /><testcase classname="tests.public.test_observability.TestCourseManagement" name="test_create_course_forbidden_for_instructor" time="0.126" /><testcase classname="tests.public.test_observability.TestDeviceManagement" name="test_my_devices" time="0.158" /><testcase classname="tests.public.test_observability.TestDeviceManagement" name="test_list_all_devices_admin" time="0.119"><failure message="assert 404 == 200&#10; +  where 404 = &lt;Response [404 Not Found]&gt;.status_code">tests\public\test_observability.py:388: in test_list_all_devices_admin
+    assert response.status_code == 200
+E   assert 404 == 200
+E    +  where 404 = &lt;Response [404 Not Found]&gt;.status_code</failure></testcase><testcase classname="tests.public.test_performance.TestResponseLatency" name="test_auth_endpoint_latency" time="0.122" /><testcase classname="tests.public.test_performance.TestResponseLatency" name="test_checkin_endpoint_latency" time="0.206"><error message="failed on setup with &quot;Failed: &#10;&#10;Cannot create test course.&#10;Status: 422&#10;Response: {&quot;detail&quot;:[{&quot;type&quot;:&quot;extra_forbidden&quot;,&quot;loc&quot;:[&quot;body&quot;,&quot;require_device_binding&quot;],&quot;msg&quot;:&quot;Extra inputs are not permitted&quot;,&quot;url&quot;:&quot;https://errors.pydantic.dev/2.5/v/extra_forbidden&quot;}]}&#10;To fix: Implement POST /api/v1/courses/ endpoint.&quot;">tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.</error></testcase><testcase classname="tests.public.test_performance.TestResponseLatency" name="test_list_endpoint_latency" time="0.008"><failure message="assert 401 == 200&#10; +  where 401 = &lt;Response [401 Unauthorized]&gt;.status_code">tests\public\test_performance.py:55: in test_list_endpoint_latency
+    assert response.status_code == 200
+E   assert 401 == 200
+E    +  where 401 = &lt;Response [401 Unauthorized]&gt;.status_code</failure></testcase><testcase classname="tests.public.test_performance.TestResponseLatency" name="test_health_check_latency" time="0.187" /><testcase classname="tests.public.test_performance.TestConcurrentUsers" name="test_concurrent_logins" time="0.640" /><testcase classname="tests.public.test_performance.TestConcurrentUsers" name="test_concurrent_checkins" time="0.001"><skipped type="pytest.skip" message="Flaky test - can fail due to SQLite concurrent write limitations in test environment">C:\Users\Lenovo\Desktop\Study\SC3099\student-starter\tests\public\test_performance.py:93: Flaky test - can fail due to SQLite concurrent write limitations in test environment</skipped></testcase><testcase classname="tests.public.test_performance.TestDatabaseOptimization" name="test_no_n_plus_one_queries" time="0.132"><error message="failed on setup with &quot;Failed: &#10;&#10;Cannot create test course.&#10;Status: 422&#10;Response: {&quot;detail&quot;:[{&quot;type&quot;:&quot;extra_forbidden&quot;,&quot;loc&quot;:[&quot;body&quot;,&quot;require_device_binding&quot;],&quot;msg&quot;:&quot;Extra inputs are not permitted&quot;,&quot;url&quot;:&quot;https://errors.pydantic.dev/2.5/v/extra_forbidden&quot;}]}&#10;To fix: Implement POST /api/v1/courses/ endpoint.&quot;">tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.</error></testcase><testcase classname="tests.public.test_performance.TestDatabaseOptimization" name="test_pagination_support" time="0.010"><failure message="assert 401 == 200&#10; +  where 401 = &lt;Response [401 Unauthorized]&gt;.status_code">tests\public\test_performance.py:185: in test_pagination_support
+    assert response.status_code == 200
+E   assert 401 == 200
+E    +  where 401 = &lt;Response [401 Unauthorized]&gt;.status_code</failure></testcase><testcase classname="tests.public.test_frontend_dashboard.TestFrontendAuthContract" name="test_login_response_format" time="0.126" /><testcase classname="tests.public.test_frontend_dashboard.TestFrontendAuthContract" name="test_registration_response_format" time="0.061" /><testcase classname="tests.public.test_frontend_dashboard.TestFrontendAuthContract" name="test_token_refresh_format" time="0.126" /><testcase classname="tests.public.test_frontend_dashboard.TestFrontendCheckinContract" name="test_checkin_request_format" time="0.193"><error message="failed on setup with &quot;Failed: &#10;&#10;Cannot create test course.&#10;Status: 422&#10;Response: {&quot;detail&quot;:[{&quot;type&quot;:&quot;extra_forbidden&quot;,&quot;loc&quot;:[&quot;body&quot;,&quot;require_device_binding&quot;],&quot;msg&quot;:&quot;Extra inputs are not permitted&quot;,&quot;url&quot;:&quot;https://errors.pydantic.dev/2.5/v/extra_forbidden&quot;}]}&#10;To fix: Implement POST /api/v1/courses/ endpoint.&quot;">tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.</error></testcase><testcase classname="tests.public.test_frontend_dashboard.TestFrontendCheckinContract" name="test_checkin_response_format" time="0.185"><error message="failed on setup with &quot;Failed: &#10;&#10;Cannot create test course.&#10;Status: 422&#10;Response: {&quot;detail&quot;:[{&quot;type&quot;:&quot;extra_forbidden&quot;,&quot;loc&quot;:[&quot;body&quot;,&quot;require_device_binding&quot;],&quot;msg&quot;:&quot;Extra inputs are not permitted&quot;,&quot;url&quot;:&quot;https://errors.pydantic.dev/2.5/v/extra_forbidden&quot;}]}&#10;To fix: Implement POST /api/v1/courses/ endpoint.&quot;">tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.</error></testcase><testcase classname="tests.public.test_frontend_dashboard.TestFrontendCheckinContract" name="test_my_checkins_list_format" time="0.140" /><testcase classname="tests.public.test_frontend_dashboard.TestDashboardSessionContract" name="test_active_sessions_format" time="0.136"><error message="failed on setup with &quot;Failed: &#10;&#10;Cannot create test course.&#10;Status: 422&#10;Response: {&quot;detail&quot;:[{&quot;type&quot;:&quot;extra_forbidden&quot;,&quot;loc&quot;:[&quot;body&quot;,&quot;require_device_binding&quot;],&quot;msg&quot;:&quot;Extra inputs are not permitted&quot;,&quot;url&quot;:&quot;https://errors.pydantic.dev/2.5/v/extra_forbidden&quot;}]}&#10;To fix: Implement POST /api/v1/courses/ endpoint.&quot;">tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.</error></testcase><testcase classname="tests.public.test_frontend_dashboard.TestDashboardSessionContract" name="test_session_details_format" time="0.125"><error message="failed on setup with &quot;Failed: &#10;&#10;Cannot create test course.&#10;Status: 422&#10;Response: {&quot;detail&quot;:[{&quot;type&quot;:&quot;extra_forbidden&quot;,&quot;loc&quot;:[&quot;body&quot;,&quot;require_device_binding&quot;],&quot;msg&quot;:&quot;Extra inputs are not permitted&quot;,&quot;url&quot;:&quot;https://errors.pydantic.dev/2.5/v/extra_forbidden&quot;}]}&#10;To fix: Implement POST /api/v1/courses/ endpoint.&quot;">tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.</error></testcase><testcase classname="tests.public.test_frontend_dashboard.TestDashboardSessionContract" name="test_session_checkins_format" time="0.125"><error message="failed on setup with &quot;Failed: &#10;&#10;Cannot create test course.&#10;Status: 422&#10;Response: {&quot;detail&quot;:[{&quot;type&quot;:&quot;extra_forbidden&quot;,&quot;loc&quot;:[&quot;body&quot;,&quot;require_device_binding&quot;],&quot;msg&quot;:&quot;Extra inputs are not permitted&quot;,&quot;url&quot;:&quot;https://errors.pydantic.dev/2.5/v/extra_forbidden&quot;}]}&#10;To fix: Implement POST /api/v1/courses/ endpoint.&quot;">tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.</error></testcase><testcase classname="tests.public.test_frontend_dashboard.TestDashboardMetricsContract" name="test_courses_list_format" time="0.140"><error message="failed on setup with &quot;Failed: &#10;&#10;Cannot create test course.&#10;Status: 422&#10;Response: {&quot;detail&quot;:[{&quot;type&quot;:&quot;extra_forbidden&quot;,&quot;loc&quot;:[&quot;body&quot;,&quot;require_device_binding&quot;],&quot;msg&quot;:&quot;Extra inputs are not permitted&quot;,&quot;url&quot;:&quot;https://errors.pydantic.dev/2.5/v/extra_forbidden&quot;}]}&#10;To fix: Implement POST /api/v1/courses/ endpoint.&quot;">tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.</error></testcase><testcase classname="tests.public.test_frontend_dashboard.TestDashboardMetricsContract" name="test_user_profile_format" time="0.141" /><testcase classname="tests.public.test_frontend_dashboard.TestDashboardMetricsContract" name="test_health_endpoint_format" time="0.179" /><testcase classname="tests.public.test_frontend_dashboard.TestErrorResponseContract" name="test_401_error_format" time="0.008" /><testcase classname="tests.public.test_frontend_dashboard.TestErrorResponseContract" name="test_400_error_format" time="0.123" /><testcase classname="tests.public.test_frontend_dashboard.TestErrorResponseContract" name="test_422_validation_error_format" time="0.012" /></testsuite></testsuites>

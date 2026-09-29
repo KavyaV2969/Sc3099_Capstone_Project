@@ -13,7 +13,7 @@ from app.models import Checkin, Course, Enrollment, Session as AttendanceSession
 from app.services.reporting import attendance, business_day, load_report, rate, session_filters, MAX_CHECKINS
 from app.schemas import (CourseStatistics, OverviewStatistics, SessionStatistics,
                          StudentStatistics, UserRole, as_utc)
-from app.services.access import accessible_course_ids, get_course, get_session, instructor_has_student_relationship, require_course_access, require_session_access
+from app.services.access import accessible_course_ids, get_course, get_session, require_course_access, require_session_access
 
 router = APIRouter(prefix="/stats", tags=["statistics"])
 
@@ -29,10 +29,10 @@ def _group(sessions, checkins):
 def overview(course_id: UUID4 | None = None, days: int = Query(default=7, ge=1, le=365),
              database: Session = Depends(get_db),
              user: User = Depends(require_roles(UserRole.INSTRUCTOR, UserRole.ADMIN))):
-    ids = accessible_course_ids(user)
+    ids = accessible_course_ids(user, read_only=True)
     if course_id:
         course = get_course(database, str(course_id))
-        require_course_access(database, course, user, allow_ta=False)
+        require_course_access(database, course, user, allow_ta=False, read_only=True)
         ids = [course.id]
     sessions, checkins, coverage = load_report(database, ids)
     grouped = _group(sessions, checkins)
@@ -54,7 +54,13 @@ def overview(course_id: UUID4 | None = None, days: int = Query(default=7, ge=1, 
     slots = sum(item["total_enrolled"] or 0 for item in summaries.values())
     trusted_approved = sum(item["approved_attendance"] or 0 for item in summaries.values())
     session_days = {s.id: business_day(s.scheduled_start) for s in sessions}
+    visible_courses = select(Course.id).where(Course.is_active.is_(True), Course.id.in_(ids))
+    total_courses = database.scalar(select(func.count()).select_from(visible_courses.subquery())) or 0
+    total_students = database.scalar(select(func.count(func.distinct(Enrollment.student_id)))
+        .join(User, User.id == Enrollment.student_id).where(Enrollment.course_id.in_(visible_courses),
+            Enrollment.is_active.is_(True), User.is_active.is_(True), User.role == "student")) or 0
     return {"total_sessions": len(sessions), "active_sessions": sum(s.status == "active" for s in sessions),
+        "total_courses": total_courses, "total_students": total_students,
         "total_checkins_today": sum(session_days[c.session_id] == today for c in checkins),
         "total_checkins_week": sum(session_days[c.session_id] >= today - timedelta(days=6) for c in checkins),
         "average_attendance_rate": rate(trusted_approved, slots) if coverage["denominator_available"] else None,
@@ -74,7 +80,7 @@ def session_statistics(
     user: User = Depends(require_roles(UserRole.INSTRUCTOR, UserRole.TA, UserRole.ADMIN)),
 ):
     session = get_session(database, str(session_id))
-    course = require_session_access(database, session, user)
+    course = require_session_access(database, session, user, read_only=True)
     records = list(database.scalars(select(Checkin).where(Checkin.session_id == session.id,
         Checkin.scheduled_deletion_at > utc_now()).limit(MAX_CHECKINS + 1)))
     if len(records) > MAX_CHECKINS:
@@ -156,6 +162,7 @@ def _course_report(database, course, start_date=None, end_date=None):
             "average_risk_score": round(sum(risks) / len(risks), 4) if risks else 0})
     known = coverage["denominator_available"]
     return {"course_id": course.id, "course_code": course.code, "course_name": course.name,
+        "flagged_checkins": sum(c.status == "flagged" for c in checkins),
         "total_sessions": len(sessions), "total_enrolled": len(current_ids), "coverage": coverage,
         "overall_attendance_rate": rate(sum(v["approved_attendance"] or 0 for v in summaries.values()),
             sum(v["total_enrolled"] or 0 for v in summaries.values())) if known else None,
@@ -172,7 +179,7 @@ def course_statistics(course_id: UUID4, start_date: datetime | None = None, end_
                       database: Session = Depends(get_db),
                       user: User = Depends(require_roles(UserRole.INSTRUCTOR, UserRole.ADMIN))):
     course = get_course(database, str(course_id))
-    require_course_access(database, course, user, allow_ta=False)
+    require_course_access(database, course, user, allow_ta=False, read_only=True)
     return _course_report(database, course, start_date, end_date)
 
 
@@ -182,15 +189,13 @@ def student_statistics(student_id: UUID4, database: Session = Depends(get_db),
     student = database.get(User, str(student_id))
     if student is None or student.role != "student":
         raise HTTPException(status_code=404, detail="student not found")
-    sessions, checkins, coverage = load_report(database, accessible_course_ids(user), student_id=student.id)
+    sessions, checkins, coverage = load_report(database, accessible_course_ids(user, read_only=True), student_id=student.id)
     current_ids = set(database.scalars(select(Enrollment.course_id).where(
         Enrollment.student_id == student.id, Enrollment.is_active.is_(True),
-        Enrollment.course_id.in_(accessible_course_ids(user)))))
+        Enrollment.course_id.in_(accessible_course_ids(user, read_only=True)))))
     by_id = {s.id: s for s in sessions}
     historical_ids = {s.course_id for s in sessions if student.id in (s.attendance_roster or [])}
     historical_ids.update(by_id[c.session_id].course_id for c in checkins)
-    if user.role != "admin" and not (current_ids or historical_ids):
-        raise HTTPException(status_code=403, detail="insufficient permissions")
     courses = list(database.scalars(select(Course).where(Course.id.in_(current_ids | historical_ids))
         .order_by(Course.code).limit(101)))
     if len(courses) > 100:
@@ -209,6 +214,7 @@ def student_statistics(student_id: UUID4, database: Session = Depends(get_db),
     codes = {course.id:course.code for course in courses}
     recent = sorted(checkins,key=lambda c:as_utc(c.checked_in_at),reverse=True)[:20]
     coverage["denominator_available"] = all(item["attendance_rate"] is not None for item in reports)
+    coverage["current_enrolled_courses"] = len(current_ids)
     return {"student_id": student.id, "student_name": student.full_name, "student_email": student.email,
         "courses": reports, "coverage": coverage,
         "recent_checkins": [{"session_name":by_id[c.session_id].name,

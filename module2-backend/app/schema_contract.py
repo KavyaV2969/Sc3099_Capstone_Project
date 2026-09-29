@@ -16,7 +16,7 @@ from sqlalchemy import inspect, select, text
 
 from app.models import Base
 
-CANONICAL_HEAD = "20260929_0008"
+CANONICAL_HEAD = "20260929_0009"
 RECOVERY_BASE_HEAD = "20260928_0006"
 LEGACY_HEAD = "20260911_0007"
 CONTRACT_DIR = Path(__file__).with_name("schema_contracts")

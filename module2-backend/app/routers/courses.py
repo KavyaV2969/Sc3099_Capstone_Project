@@ -36,7 +36,7 @@ def validate_instructor(database: Session, instructor_id: str) -> None:
 def list_courses(
     is_active: bool = True, semester: str | None = None, instructor_id: UUID4 | None = None,
     limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0),
-    current_user: User = Depends(get_current_user), database: Session = Depends(get_db),
+    database: Session = Depends(get_db),
 ):
     instructor = User.__table__.alias("instructor")
     query = (select(Course, instructor.c.full_name)
@@ -45,11 +45,9 @@ def list_courses(
     if semester is not None:
         query = query.where(Course.semester == semester)
     if instructor_id is not None:
-        if current_user.role != "admin":
-            raise HTTPException(status_code=403, detail="instructor filter requires admin")
         query = query.where(Course.instructor_id == str(instructor_id))
     total = database.scalar(select(func.count()).select_from(query.subquery()))
-    courses = database.execute(query.order_by(Course.code).offset(offset).limit(limit)).all()
+    courses = database.execute(query.order_by(Course.created_at.desc(), Course.id).offset(offset).limit(limit)).all()
     return {"items": [course_response(database, course, instructor_name) for course, instructor_name in courses],
             "total": total, "limit": limit, "offset": offset}
 

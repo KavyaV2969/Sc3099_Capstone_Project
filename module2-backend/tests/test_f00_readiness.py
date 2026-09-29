@@ -37,10 +37,10 @@ def test_catalog_normalization_preserves_case_sensitive_values():
     assert _normalize_check(a) != _normalize_check(a.replace("'admin'", "'ADMIN'"))
 
 
-def test_registration_requires_key_and_rejects_overlength_fingerprint(compliance_api):
+def test_registration_allows_keyless_but_rejects_blank_key_and_overlength_fingerprint(compliance_api):
     client, _, _ = compliance_api
     payload = {"device_fingerprint": "phone", "device_name": "Phone", "platform": "ios"}
-    assert client.post("/api/v1/devices/register", json=payload).status_code == 422
+    assert client.post("/api/v1/devices/register", json=payload).status_code == 201
     payload["public_key"] = ""
     assert client.post("/api/v1/devices/register", json=payload).status_code == 422
     payload["public_key"] = "   "

@@ -1,0 +1,56 @@
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 20260825_0001, Create the interim users and audit logs tables.
+INFO  [alembic.runtime.migration] Running upgrade 20260825_0001 -> 20260908_0002, Add the Week 3 course, enrollment, session and check-in tables.
+INFO  [alembic.runtime.migration] Running upgrade 20260908_0002 -> 20260911_0003, Persist consecutive password failures for account-level lockout.
+INFO  [alembic.runtime.migration] Running upgrade 20260911_0003 -> 20260911_0004, Make the optional course instructor extension match the revised starter spec.
+INFO  [alembic.runtime.migration] Running upgrade 20260911_0004 -> 20260915_0005, Add device, verification, appeal, review, and retention support.
+INFO  [alembic.runtime.migration] Running upgrade 20260915_0005 -> 20260928_0006, Align implemented device fields with documented storage, preserving data.
+INFO  [alembic.runtime.migration] Running upgrade 20260928_0006 -> 20260929_0007, Activation credentials, device revocation and retained attendance roster.
+INFO  [alembic.runtime.migration] Running upgrade 20260929_0007 -> 20260929_0008, Enforce audit immutability and completion field invariants.
+INFO  [alembic.runtime.migration] Running upgrade 20260929_0008 -> 20260929_0009, Preserve unknown GPS accuracy as NULL without inventing measurements.
+{'session_stats_count': 1, 'export_total': 0, 'export_approved_attendance': 1, 'export_records': 0, 'export_denominator_available': True}
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 20260825_0001, Create the interim users and audit logs tables.
+INFO  [alembic.runtime.migration] Running upgrade 20260825_0001 -> 20260908_0002, Add the Week 3 course, enrollment, session and check-in tables.
+INFO  [alembic.runtime.migration] Running upgrade 20260908_0002 -> 20260911_0003, Persist consecutive password failures for account-level lockout.
+INFO  [alembic.runtime.migration] Running upgrade 20260911_0003 -> 20260911_0004, Make the optional course instructor extension match the revised starter spec.
+INFO  [alembic.runtime.migration] Running upgrade 20260911_0004 -> 20260915_0005, Add device, verification, appeal, review, and retention support.
+INFO  [alembic.runtime.migration] Running upgrade 20260915_0005 -> 20260928_0006, Align implemented device fields with documented storage, preserving data.
+INFO  [alembic.runtime.migration] Running upgrade 20260928_0006 -> 20260929_0007, Activation credentials, device revocation and retained attendance roster.
+INFO  [alembic.runtime.migration] Running upgrade 20260929_0007 -> 20260929_0008, Enforce audit immutability and completion field invariants.
+INFO  [alembic.runtime.migration] Running upgrade 20260929_0008 -> 20260929_0009, Preserve unknown GPS accuracy as NULL without inventing measurements.
+F{'approved_submissions': 1, 'approved_attendance': 0, 'eligible_roster': 1, 'checkin_status': 'approved'}
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 20260825_0001, Create the interim users and audit logs tables.
+INFO  [alembic.runtime.migration] Running upgrade 20260825_0001 -> 20260908_0002, Add the Week 3 course, enrollment, session and check-in tables.
+INFO  [alembic.runtime.migration] Running upgrade 20260908_0002 -> 20260911_0003, Persist consecutive password failures for account-level lockout.
+INFO  [alembic.runtime.migration] Running upgrade 20260911_0003 -> 20260911_0004, Make the optional course instructor extension match the revised starter spec.
+INFO  [alembic.runtime.migration] Running upgrade 20260911_0004 -> 20260915_0005, Add device, verification, appeal, review, and retention support.
+INFO  [alembic.runtime.migration] Running upgrade 20260915_0005 -> 20260928_0006, Align implemented device fields with documented storage, preserving data.
+INFO  [alembic.runtime.migration] Running upgrade 20260928_0006 -> 20260929_0007, Activation credentials, device revocation and retained attendance roster.
+INFO  [alembic.runtime.migration] Running upgrade 20260929_0007 -> 20260929_0008, Enforce audit immutability and completion field invariants.
+INFO  [alembic.runtime.migration] Running upgrade 20260929_0008 -> 20260929_0009, Preserve unknown GPS accuracy as NULL without inventing measurements.
+F{'coverage': {'available_from': '2026-08-30T13:25:41.600514+00:00', 'start': '2026-08-30T13:25:41.600514+00:00', 'end': '2026-08-15T13:25:41.592528+00:00', 'limited_by_retention': True, 'denominator_available': True}, 'attendance_rate': 0.0}
+F
+================================== FAILURES ===================================
+__ test_explicit_session_export_matches_statistics_across_singapore_midnight __
+tmp\backend-handover-audit\probes.py:28: in test_explicit_session_export_matches_statistics_across_singapore_midnight
+    assert exported['summary']['total']==stats['checked_in']
+E   assert 0 == 1
+_______ test_reactivation_adds_newly_eligible_student_to_active_roster ________
+tmp\backend-handover-audit\probes.py:45: in test_reactivation_adds_newly_eligible_student_to_active_roster
+    assert stats['approved_attendance']==stats['by_status']['approved']
+E   assert 0 == 1
+_____ test_retention_clamping_does_not_return_an_inverted_supported_range _____
+tmp\backend-handover-audit\probes.py:97: in test_retention_clamping_does_not_return_an_inverted_supported_range
+    assert data['coverage']['start'] <= data['coverage']['end']
+E   AssertionError: assert '2026-08-30T13:25:41.600514+00:00' <= '2026-08-15T13:25:41.592528+00:00'
+- generated xml file: C:\Users\Lenovo\Desktop\Study\SC3099\student-starter\tmp\backend-handover-audit\probes-postgresql.xml -
+=========================== short test summary info ===========================
+FAILED tmp/backend-handover-audit/probes.py::test_explicit_session_export_matches_statistics_across_singapore_midnight
+FAILED tmp/backend-handover-audit/probes.py::test_reactivation_adds_newly_eligible_student_to_active_roster
+FAILED tmp/backend-handover-audit/probes.py::test_retention_clamping_does_not_return_an_inverted_supported_range
+3 failed in 3.79s

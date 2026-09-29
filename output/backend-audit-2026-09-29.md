@@ -1,5 +1,9 @@
 # SC3099 Module 2: Backend audit
 
+> **Historical evidence:** Current status and policy are superseded by the user-approved
+> [reduced-contract implementation and release report](backend-reduced-contract-2026-09-29.md).
+> The earlier remaining-conflict claims below describe the policy before those reductions.
+
 **Completion update — 29 September 2026:** The required backend portions of
 R01–R13 and all 23 outstanding requirement rows have been implemented and
 verified. This document preserves the original audit baseline below. See the

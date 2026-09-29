@@ -228,7 +228,7 @@ class Checkin(Base):
     verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     latitude: Mapped[float] = mapped_column(Float)
     longitude: Mapped[float] = mapped_column(Float)
-    location_accuracy_meters: Mapped[float] = mapped_column(Float)
+    location_accuracy_meters: Mapped[float | None] = mapped_column(Float)
     distance_from_venue_meters: Mapped[float] = mapped_column(Float)
     status: Mapped[str] = mapped_column(String(20))
     risk_score: Mapped[float] = mapped_column(Float)

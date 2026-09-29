@@ -1,5 +1,12 @@
 # SAIV API Specification
 
+> **Current Module 2 policy (29 September 2026):** The user approved the
+> [public contract reductions](BACKEND-COMPLETION.md#approved-public-contract-reductions).
+> They supersede earlier conflicting examples only for optional liveness/GPS
+> accuracy, per-attempt GPS permission, keyless inventory, instructor reads,
+> the public course catalogue and the flagged response envelope. Other written
+> requirements and grading/security values continue to govern.
+
 > **Later grading overrides:** Read
 > [`GRADING-CLARIFICATIONS.md`](GRADING-CLARIFICATIONS.md) first. It defines the
 > graded account lockout, rate-limit overrides, and Singapore-only check-in rules.
@@ -255,7 +262,8 @@ const response = await fetch('/api/v1/users/me/face/enroll', {
 ### Courses
 
 #### GET /courses/
-List courses with optional filters. **Requires auth.**
+List public course metadata with optional filters. **No authentication required.**
+Results order by creation time descending, then ID. Instructor assignment is a public catalogue filter; detail and mutations retain authentication.
 
 **Query Parameters:**
 | Parameter | Type | Default | Description |
@@ -528,7 +536,7 @@ This endpoint also enforces the graded Singapore-only GPS and client-IP rules in
   "longitude": 103.6831,
   "location_accuracy_meters": 10.0,
   "device_fingerprint": "unique_device_id",
-  "liveness_challenge_response": "base64_encoded_image",  // Required when either verification flag is true
+  "liveness_challenge_response": "base64_encoded_image",  // Required for face matching; optional consented liveness evidence
   "qr_code": "session_qr_code"  // Optional, if session requires QR
 }
 ```
@@ -553,18 +561,28 @@ This endpoint also enforces the graded Singapore-only GPS and client-IP rules in
 }
 ```
 
-**Verification requirements:** The image is optional only when both
-`require_liveness_check` and `require_face_match` are false. Otherwise it must be
-nonblank. Every enabled check must return complete validated evidence. Disabled
-checks are not called and return null biometric fields; their weights are not
-redistributed. Bonus liveness must be disabled explicitly when unavailable.
+**Verification requirements:** Required face matching needs camera consent,
+face enrollment and a nonblank image. Liveness is evaluated only when the session
+requests it, camera consent is true and a nonblank image is supplied. Otherwise
+no liveness call is made, its fields are null and its contribution is zero without
+redistributing weights. Evaluated checks require complete validated evidence;
+failed checks reject and malformed/unavailable evidence returns a dependency error.
+The effective liveness decision is frozen and rechecked under final locks.
+
+Submitting coordinates permits that authenticated attendance attempt; it does
+not change the stored geolocation preference. Accuracy can be omitted or null;
+supplied values must be finite and nonnegative. Unknown accuracy remains null in
+storage/responses/signing, adds the existing 0.25 geolocation-risk adjustment and
+prevents impossible-travel inference unless both radii are known. Singapore/IP
+eligibility and the critical geofence rule still apply.
 
 Backend scoring is local (`weighted-v1`), using Security's five weights. Liveness
-and face risk are `1 - score`. Device risk is 0 for an active owned trusted device,
-0.5 for an active owned untrusted device, and 1 otherwise. Geolocation risk is
-`min(1, distance/radius)`, increased by 0.25 and capped at 1 when accuracy exceeds
+and face risk are `1 - score`. With valid one-use cryptographic proof, device risk
+is 0 for an active owned trusted device and 0.5 for an active owned untrusted
+device; unsigned or keyless submissions receive device risk 1. Geolocation risk is
+`min(1, distance/radius)`, increased by 0.25 and capped at 1 when accuracy is unknown or exceeds
 radius. Network detection remains unavailable and contributes zero in the current
-backend; this does not establish freedom from VPN/proxy use. Device lookup is not
+backend; this does not establish freedom from VPN/proxy use. Registration alone is not
 cryptographic device proof. Positive factors include `risk`, `weight`,
 `contribution`, `severity`, and a `critical` flag. Scores are rounded to four decimal
 places before applying the decision table. The outcome audit records the policy,
@@ -678,36 +696,18 @@ Get all check-ins for a session. **Requires auth (instructor/TA).**
 ```
 
 #### GET /checkins/flagged
-Get check-ins requiring review (flagged or appealed). **Requires auth (instructor/TA).**
-
-**Query Parameters:**
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `course_id` | uuid | - | Filter by course |
-| `session_id` | uuid | - | Filter by session |
-| `limit` | int | 50 | Results per page |
+Get flagged or appealed check-ins. **Requires instructor, assigned TA or admin.**
+Instructors/admins can read all courses; TAs remain limited to assigned courses.
+Optional `course_id`/`session_id` filters apply before pagination. `limit` defaults
+to 50, maximum 100; `offset` defaults to 0. Ordering is checked-in time, then ID.
+The total counts all matches before pagination. This envelope deliberately
+replaces the historical array; there is no compatibility mode.
 
 **Response:** `200 OK`
 ```json
-[
-  {
-    "id": "uuid",
-    "session_id": "uuid",
-    "session_name": "Lecture 5",
-    "student_id": "uuid",
-    "student_name": "John Doe",
-    "status": "flagged",  // or "appealed"
-    "checked_in_at": "2024-01-15T14:05:00Z",
-    "risk_score": 0.72,
-    "risk_factors": [
-      {"type": "geo_out_of_bounds", "severity": "high", "weight": 0.4},
-      {"type": "device_unknown", "severity": "medium", "weight": 0.15}
-    ],
-    "appeal_reason": null,  // Set if status is "appealed"
-    "appealed_at": null
-  }
-]
+{"items": [], "total": 0, "limit": 50, "offset": 0}
 ```
+Items use the existing full check-in representation.
 
 #### GET /checkins/{checkin_id}
 Get specific check-in details. **Requires auth (owner student, or instructor/TA for session).**
@@ -924,12 +924,13 @@ Device management for security and trust scoring.
 #### POST /devices/register
 Register a new device. **Requires auth.**
 
-The fingerprint is 1â€“64 characters and globally unique. `public_key` is required
-and must be nonblank on registration and re-registration. A fingerprint belonging
-to another user, including a concurrent registration conflict, returns HTTP 400.
-Legacy stored names/platforms may be null in read responses; new registrations
-still require both fields. Existing null public keys are preserved during the F00
-transition described in `recommended_design/DATABASE-SCHEMA.md`.
+The fingerprint is 1–64 characters and globally unique. `public_key` is optional
+and nullable. Supplied keys must be valid PEM P-256 or RSA >=2048 bits. New keyless
+devices are untrusted and cannot obtain challenges. On re-registration, omission
+preserves a credential; explicit null removes it and clears trust. A bounded
+`browser` string (<=255 characters) is accepted but neither stored nor returned.
+Ownership conflicts return 400; administrative revocation remains enforced.
+Names and platforms are still required; legacy null values remain readable.
 
 **Request:**
 ```json
@@ -2014,6 +2015,10 @@ For implemented Module 2 behavior, the completion contract in
 [BACKEND-COMPLETION.md](BACKEND-COMPLETION.md) takes precedence over older examples
 in this document. It specifies activation, signed device challenges, retained
 attendance denominators, input bounds, error/retry behavior and correlation.
-Existing response arrays/envelopes and `/api/v1` paths remain compatible.
+Existing `/api/v1` paths remain compatible; the flagged queue intentionally changes from an array to the documented envelope.
 Unsupported mutation fields return 422; nonblank QR input is unsupported.
 Statistics attendance rates can be null when historical denominators are unknown.
+
+Public-consumer compatibility aliases and admin summary/inventory routes are
+listed in [BACKEND-COMPLETION.md](BACKEND-COMPLETION.md#public-test-compatibility-additions--29-september-2026).
+The approved reductions above govern conflicting authentication/key/consent/liveness examples; required face matching and evaluated biometric evidence stay strict.

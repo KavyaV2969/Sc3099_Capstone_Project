@@ -2,15 +2,15 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, Query, status
 from pydantic import UUID4
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.audit import write_audit_log
 from app.db import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, require_roles
 from app.models import Device, User, utc_now
-from app.schemas import CheckinCreate, DeviceRegister, DeviceResponse, DeviceUpdate
+from app.schemas import CheckinCreate, DeviceRegister, DeviceResponse, DeviceUpdate, UserRole
 from app.services.devices import canonical_key, parse_key, issue_challenge
 from app.services.access import get_session
 from app.rate_limit import enforce_limit
@@ -18,6 +18,7 @@ from app.rate_limit import enforce_limit
 router = APIRouter(prefix="/devices", tags=["devices"])
 
 
+@router.post("/", response_model=DeviceResponse, status_code=status.HTTP_201_CREATED)
 @router.post("/register", response_model=DeviceResponse, status_code=status.HTTP_201_CREATED)
 def register_device(
     payload: DeviceRegister,
@@ -25,7 +26,7 @@ def register_device(
     database: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> Device:
-    key = canonical_key(payload.public_key)
+    key = canonical_key(payload.public_key) if payload.public_key is not None else None
     try:
         device = database.scalar(
             select(Device).where(Device.device_fingerprint == payload.device_fingerprint).with_for_update()
@@ -38,6 +39,8 @@ def register_device(
         else:
             if device.revoked_at is not None:
                 raise HTTPException(status_code=403, detail="device is administratively revoked")
+            if "public_key" not in payload.model_fields_set:
+                key = device.public_key
             if device.public_key != key:
                 device.is_trusted, device.trust_score = False, "low"
             device.device_name = payload.device_name
@@ -68,6 +71,19 @@ def my_devices(
         select(Device).where(Device.user_id == user.id).order_by(Device.first_seen_at.desc(), Device.id)
         .limit(limit).offset(offset)
     ))
+
+
+@router.get("/")
+def list_devices(
+    limit: int = Query(100, ge=1, le=100), offset: int = Query(0, ge=0),
+    database: Session = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.ADMIN)),
+):
+    total = database.scalar(select(func.count()).select_from(Device)) or 0
+    devices = database.scalars(select(Device).order_by(Device.first_seen_at.desc(), Device.id)
+                               .limit(limit).offset(offset))
+    return {"items": [DeviceResponse.model_validate(device) for device in devices],
+            "total": total, "limit": limit, "offset": offset}
 
 
 def _owned_or_admin(database: Session, device_id: UUID4, user: User, *, lock: bool = False) -> Device:

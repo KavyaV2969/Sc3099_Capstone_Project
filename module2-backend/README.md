@@ -9,7 +9,7 @@ cleanup and Prometheus metrics. See the
 
 Backend implementation is complete for the agreed scope. Real biometric
 integration remains blocked: the supplied Module 3 operations return 501 and
-a functioning external implementation is required. Enabled biometric checks are
+a functioning external implementation is required. Required face matching and evaluated biometric checks are
 preserved; successful mocks do not certify real face-service interoperability.
 
 ## Run and configure
@@ -33,7 +33,7 @@ Set `FACE_SERVICE_URL` to the real service when available. For host-side tooling
 use explicit `127.0.0.1` database/Redis URLs to avoid Windows IPv6 fallback delays.
 
 The production image includes the complete recovery/verification source set.
-The current canonical head is `20260929_0008`. Legacy recovery first verifies
+The current canonical head is `20260929_0009`. Legacy recovery first verifies
 the historical `20260928_0006` destination, then applies the normal forward
 completion migrations. See the [recovery runbook](../docs/F00-DATABASE-RECOVERY.md).
 `/health` requires database connectivity, exact frozen schema/ORM, enabled audit
@@ -46,8 +46,8 @@ OpenAPI is available at `/docs`; all API routes use `/api/v1`.
 | Area | Supported operations |
 |---|---|
 | Authentication | Register, login, refresh, single-use activation |
-| Users | Own profile/consent, face enrollment, deletion scheduling; scoped profile reads; admin directory/update |
-| Courses | Authenticated list/read, admin create/update/soft delete |
+| Users | Own profile/consent, face enrollment, deletion scheduling; instructor student-profile reads; admin directory/update |
+| Courses | Public metadata list, authenticated detail, admin create/update/soft delete |
 | Enrollment | Current lists/rosters, single/bulk enrollment, secure optional account creation, withdrawal |
 | Sessions | Create, list/discover/read, owner/admin update, guarded deletion, documented admin override |
 | Check-ins | Eligibility/verification/scoring, own/scoped history, detail, appeal, staff review |
@@ -60,15 +60,17 @@ bcrypt cost 10 by default. Refresh issues another pair without revoking the old
 refresh token. Ten consecutive bad passwords block login, including attempt ten;
 documented admin activation resets the counter. Grading rate limits are preserved.
 
-Instructors read/review only courses assigned to them or containing sessions they
-own. Course read/review permission does not grant mutation of another instructor's
-session. Administrators retain access and assigned TAs retain documented course
+Instructors read all student/course data. Enrollment writes and reviews require
+a teaching relationship, and session mutation still requires ownership/admin. Administrators retain access and assigned TAs retain documented course
 permissions. CourseTA provisioning uses the idempotent operator SQL in the
 completion contract; no unnecessary TA-management endpoint was added.
 
-Check-ins require active course/student/enrollment/session/window, appropriate
-consents, Singapore/local IP and GPS eligibility, and one record per student/session.
-Enabled face/liveness checks require valid service evidence. Missing evidence
+Check-ins require active course/student/enrollment/session/window, Singapore/local
+IP and GPS eligibility, and one record per student/session. Coordinates authorize
+only that attempt without changing stored GPS consent. Accuracy is optional/null;
+unknown accuracy increases geolocation risk and skips travel inference. Liveness
+runs only when requested with camera consent and a nonblank image, otherwise null
+results/zero contribution. Required face matching remains strict. Missing required evidence
 returns 400, dependency failure 503, and changed policy/reference hash 409, with
 no attendance row. Valid failed verification persists a rejected check-in (201).
 Clients must inspect returned status rather than count all 201 responses as success.
@@ -102,7 +104,12 @@ data and remain ignored. Disable the cleanup worker during the test process.
 
 The final report records fresh full-suite, pinned Linux image, PostgreSQL/Redis,
 migration/recovery, deployment/restart, Prometheus and 10/100-user HTTP evidence.
-Do not disable verification flags to make the outstanding real biometric gate pass.
+Two unchanged selected public runs must each give 66 passes and the supplied skip.
+Required face checks must not be disabled to claim real biometric interoperability.
+See the [current release report](../output/backend-reduced-contract-2026-09-29.md)
+for final verification. Keyless registration and the public catalogue/flagged
+envelope are explicit user-approved contract reductions, not simultaneous
+compliance with their contradictory historical versions.
 
 ## Historical evidence
 
@@ -256,3 +263,11 @@ F00_BACKUP_MANIFEST. Set F00_POSTGRES_CONTAINER to the PostgreSQL container name
 when pg_restore runs through Docker; otherwise install the PostgreSQL client tools.
 Recovery tests restore the immutable dump into fresh disposable databases and do
 not modify the operator's committed rehearsal.
+
+## Supplied public-test compatibility
+
+The backend supports the minimal documented compatibility additions in the
+[completion contract](../docs/BACKEND-COMPLETION.md). The supplied outer tests
+remain unchanged at the user's request; they are not all green. Exact marking
+results and requirement conflicts are in the
+[reconciliation report](../output/backend-public-test-reconciliation-2026-09-29.md).

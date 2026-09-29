@@ -44,8 +44,8 @@ def get_checkin(database: Session, checkin_id: str, *, lock: bool = False) -> Ch
     return checkin
 
 
-def can_manage_course(database: Session, course: Course, user: User, *, allow_ta: bool = True) -> bool:
-    if user.role == "admin":
+def can_manage_course(database: Session, course: Course, user: User, *, allow_ta: bool = True, read_only: bool = False) -> bool:
+    if user.role == "admin" or (read_only and user.role == "instructor"):
         return True
     if user.role == "instructor" and (
         course.instructor_id == user.id
@@ -60,10 +60,10 @@ def can_manage_course(database: Session, course: Course, user: User, *, allow_ta
     return bool(allow_ta and user.role == "ta" and database.get(CourseTA, (course.id, user.id)))
 
 
-def accessible_course_ids(user: User):
-    """SQL counterpart of course read/review access; session ownership is course-wide."""
+def accessible_course_ids(user: User, *, read_only: bool = False):
+    """Read scope may include all instructor data; mutation scope stays taught courses."""
     query = select(Course.id)
-    if user.role == "admin":
+    if user.role == "admin" or (read_only and user.role == "instructor"):
         return query
     if user.role == "instructor":
         return query.where(or_(Course.instructor_id == user.id, exists().where(
@@ -73,28 +73,30 @@ def accessible_course_ids(user: User):
     return query.where(Course.id.in_(select(CourseTA.course_id).where(CourseTA.ta_id == user.id)))
 
 
-def require_course_access(database: Session, course: Course, user: User, *, allow_ta: bool = True) -> None:
-    if not can_manage_course(database, course, user, allow_ta=allow_ta):
+def require_course_access(database: Session, course: Course, user: User, *, allow_ta: bool = True, read_only: bool = False) -> None:
+    if not can_manage_course(database, course, user, allow_ta=allow_ta, read_only=read_only):
         raise HTTPException(status_code=403, detail="insufficient course permissions")
 
 
-def require_session_access(database: Session, session: AttendanceSession, user: User, *, allow_ta: bool = True) -> Course:
+def require_session_access(database: Session, session: AttendanceSession, user: User, *, allow_ta: bool = True, read_only: bool = False) -> Course:
     course = get_course(database, session.course_id)
-    require_course_access(database, course, user, allow_ta=allow_ta)
+    require_course_access(database, course, user, allow_ta=allow_ta, read_only=read_only)
     return course
 
 
-def require_checkin_access(database: Session, checkin: Checkin, user: User) -> AttendanceSession:
+def require_checkin_access(database: Session, checkin: Checkin, user: User, *, read_only: bool = False) -> AttendanceSession:
     session = get_session(database, checkin.session_id)
     if user.role == "student" and checkin.student_id == user.id:
         return session
-    require_session_access(database, session, user)
+    require_session_access(database, session, user, read_only=read_only)
     return session
 
 
-def instructor_has_student_relationship(database: Session, instructor: User, student_id: str) -> bool:
+def instructor_has_student_relationship(database: Session, instructor: User, student_id: str, *, read_only: bool = False) -> bool:
     if instructor.role == "admin":
         return True
+    if read_only and instructor.role == "instructor":
+        return database.scalar(select(User.id).where(User.id == student_id, User.role == "student")) is not None
     if instructor.role not in {"instructor", "ta"}:
         return False
     statement = (

@@ -1,0 +1,365 @@
+........EEEEEEEE....EE.........EE...FEEEEEEEE.FE.F.....F.EF..sEF...EE.EE [ 91%]
+EE.....                                                                  [100%]
+=================================== ERRORS ====================================
+__________ ERROR at setup of TestCourseManagement.test_list_courses ___________
+tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.
+_______ ERROR at setup of TestCourseManagement.test_get_course_details ________
+tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.
+______ ERROR at setup of TestSessionManagement.test_list_active_sessions ______
+tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.
+______ ERROR at setup of TestSessionManagement.test_get_session_details _______
+tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.
+________ ERROR at setup of TestCheckInWorkflow.test_successful_checkin ________
+tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.
+_____ ERROR at setup of TestCheckInWorkflow.test_duplicate_checkin_fails ______
+tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.
+_________ ERROR at setup of TestCheckInWorkflow.test_list_my_checkins _________
+tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.
+_________ ERROR at setup of TestDeviceManagement.test_list_my_devices _________
+tests\conftest.py:487: in test_device
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot register test device.
+E   Status: 422
+E   Response: {"detail":[{"type":"missing","loc":["body","public_key"],"msg":"Field required","url":"https://errors.pydantic.dev/2.5/v/missing"},{"type":"extra_forbidden","loc":["body","browser"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/devices/ or /api/v1/devices/register endpoint.
+_ ERROR at setup of TestAuthorizationControls.test_student_cannot_access_instructor_endpoints _
+tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.
+_ ERROR at setup of TestAuthorizationControls.test_instructor_can_view_session_checkins _
+tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.
+_ ERROR at setup of TestDataMinimization.test_no_raw_face_images_in_checkin_response _
+tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.
+_ ERROR at setup of TestDataMinimization.test_only_face_embedding_hash_stored _
+tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.
+___________ ERROR at setup of TestStatsEndpoints.test_stats_session ___________
+tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.
+___________ ERROR at setup of TestStatsEndpoints.test_stats_course ____________
+tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.
+___________ ERROR at setup of TestStatsEndpoints.test_stats_student ___________
+tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.
+___ ERROR at setup of TestSessionManagement.test_list_sessions_with_filters ___
+tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.
+_________ ERROR at setup of TestSessionManagement.test_create_session _________
+tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.
+_________ ERROR at setup of TestSessionManagement.test_update_session _________
+tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.
+___ ERROR at setup of TestEnrollmentManagement.test_list_course_enrollments ___
+tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.
+_______ ERROR at setup of TestEnrollmentManagement.test_my_enrollments ________
+tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.
+__ ERROR at setup of TestExportEndpoints.test_export_session_attendance_json __
+tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.
+_____ ERROR at setup of TestResponseLatency.test_checkin_endpoint_latency _____
+tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.
+____ ERROR at setup of TestDatabaseOptimization.test_no_n_plus_one_queries ____
+tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.
+__ ERROR at setup of TestFrontendCheckinContract.test_checkin_request_format __
+tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.
+_ ERROR at setup of TestFrontendCheckinContract.test_checkin_response_format __
+tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.
+_ ERROR at setup of TestDashboardSessionContract.test_active_sessions_format __
+tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.
+_ ERROR at setup of TestDashboardSessionContract.test_session_details_format __
+tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.
+_ ERROR at setup of TestDashboardSessionContract.test_session_checkins_format _
+tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.
+___ ERROR at setup of TestDashboardMetricsContract.test_courses_list_format ___
+tests\conftest.py:331: in test_course
+    pytest.fail(
+E   Failed: 
+E   
+E   Cannot create test course.
+E   Status: 422
+E   Response: {"detail":[{"type":"extra_forbidden","loc":["body","require_device_binding"],"msg":"Extra inputs are not permitted","url":"https://errors.pydantic.dev/2.5/v/extra_forbidden"}]}
+E   To fix: Implement POST /api/v1/courses/ endpoint.
+================================== FAILURES ===================================
+___________________ TestStatsEndpoints.test_stats_overview ____________________
+tests\public\test_observability.py:29: in test_stats_overview
+    assert "total_courses" in data
+E   AssertionError: assert 'total_courses' in {'active_sessions': 0, 'approval_rate': 0.0, 'average_attendance_rate': 0.0, 'average_risk_score': 0.0, ...}
+______________ TestCheckinFiltering.test_flagged_checkins_queue _______________
+tests\public\test_observability.py:234: in test_flagged_checkins_queue
+    assert "items" in data
+E   AssertionError: assert 'items' in []
+__________________ TestAuditLogFiltering.test_audit_summary ___________________
+tests\public\test_observability.py:293: in test_audit_summary
+    assert response.status_code == 200
+E   assert 404 == 200
+E    +  where 404 = <Response [404 Not Found]>.status_code
+______________ TestDeviceManagement.test_list_all_devices_admin _______________
+tests\public\test_observability.py:388: in test_list_all_devices_admin
+    assert response.status_code == 200
+E   assert 404 == 200
+E    +  where 404 = <Response [404 Not Found]>.status_code
+_______________ TestResponseLatency.test_list_endpoint_latency ________________
+tests\public\test_performance.py:55: in test_list_endpoint_latency
+    assert response.status_code == 200
+E   assert 401 == 200
+E    +  where 401 = <Response [401 Unauthorized]>.status_code
+______________ TestDatabaseOptimization.test_pagination_support _______________
+tests\public\test_performance.py:185: in test_pagination_support
+    assert response.status_code == 200
+E   assert 401 == 200
+E    +  where 401 = <Response [401 Unauthorized]>.status_code
+- generated xml file: C:\Users\Lenovo\Desktop\Study\SC3099\student-starter\tmp\backend-public-tests-final.xml -
+=============================== SCORING SUMMARY ===============================
+
+  test_api_functional.py: 10.0/10.0 pts (8/8 tests)
+  test_frontend_dashboard.py: 3.0/3.0 pts (3/3 tests)
+  test_observability.py: 1.0/3.0 pts (1/3 tests)
+    ✗ test_stats_overview: 0/1 pts
+    ✗ test_flagged_checkins_queue: 0/1 pts
+  test_performance.py: 2.5/3.5 pts (3/5 tests)
+    ✗ test_list_endpoint_latency: 0/0 pts
+    ✗ test_pagination_support: 0/0 pts
+  test_privacy_basic.py: 6.0/6.0 pts (6/6 tests)
+  test_security_basic.py: 10.0/10.0 pts (10/10 tests)
+
+--------------------------------------  ---------------------------------------
+  By Category:
+    auth_security: 4.0/4.0 pts
+    authentication: 5.0/5.0 pts
+    authorization: 2.0/2.0 pts
+    concurrency: 1.0/1.0 pts
+    consent: 3.0/3.0 pts
+    dashboard_contract: 1.0/1.0 pts
+    data_minimization: 1.0/1.0 pts
+    data_retention: 2.0/2.0 pts
+    db_optimization: 0.0/0.5 pts
+    frontend_contract: 2.0/2.0 pts
+    input_validation: 3.0/3.0 pts
+    latency: 1.5/2.0 pts
+    observability_bonus: 1.0/3.0 pts
+    rate_limiting: 1.0/1.0 pts
+    user_management: 5.0/5.0 pts
+
+  TOTAL SCORE: 32.5/35.5 (91.5%)
+  LETTER GRADE: A
+======================================  =======================================
+=========================== short test summary info ===========================
+FAILED tests/public/test_observability.py::TestStatsEndpoints::test_stats_overview
+FAILED tests/public/test_observability.py::TestCheckinFiltering::test_flagged_checkins_queue
+FAILED tests/public/test_observability.py::TestAuditLogFiltering::test_audit_summary
+FAILED tests/public/test_observability.py::TestDeviceManagement::test_list_all_devices_admin
+FAILED tests/public/test_performance.py::TestResponseLatency::test_list_endpoint_latency
+FAILED tests/public/test_performance.py::TestDatabaseOptimization::test_pagination_support
+ERROR tests/public/test_api_functional.py::TestCourseManagement::test_list_courses
+ERROR tests/public/test_api_functional.py::TestCourseManagement::test_get_course_details
+ERROR tests/public/test_api_functional.py::TestSessionManagement::test_list_active_sessions
+ERROR tests/public/test_api_functional.py::TestSessionManagement::test_get_session_details
+ERROR tests/public/test_api_functional.py::TestCheckInWorkflow::test_successful_checkin
+ERROR tests/public/test_api_functional.py::TestCheckInWorkflow::test_duplicate_checkin_fails
+ERROR tests/public/test_api_functional.py::TestCheckInWorkflow::test_list_my_checkins
+ERROR tests/public/test_api_functional.py::TestDeviceManagement::test_list_my_devices
+ERROR tests/public/test_security_basic.py::TestAuthorizationControls::test_student_cannot_access_instructor_endpoints
+ERROR tests/public/test_security_basic.py::TestAuthorizationControls::test_instructor_can_view_session_checkins
+ERROR tests/public/test_privacy_basic.py::TestDataMinimization::test_no_raw_face_images_in_checkin_response
+ERROR tests/public/test_privacy_basic.py::TestDataMinimization::test_only_face_embedding_hash_stored
+ERROR tests/public/test_observability.py::TestStatsEndpoints::test_stats_session
+ERROR tests/public/test_observability.py::TestStatsEndpoints::test_stats_course
+ERROR tests/public/test_observability.py::TestStatsEndpoints::test_stats_student
+ERROR tests/public/test_observability.py::TestSessionManagement::test_list_sessions_with_filters
+ERROR tests/public/test_observability.py::TestSessionManagement::test_create_session
+ERROR tests/public/test_observability.py::TestSessionManagement::test_update_session
+ERROR tests/public/test_observability.py::TestEnrollmentManagement::test_list_course_enrollments
+ERROR tests/public/test_observability.py::TestEnrollmentManagement::test_my_enrollments
+ERROR tests/public/test_observability.py::TestExportEndpoints::test_export_session_attendance_json
+ERROR tests/public/test_performance.py::TestResponseLatency::test_checkin_endpoint_latency
+ERROR tests/public/test_performance.py::TestDatabaseOptimization::test_no_n_plus_one_queries
+ERROR tests/public/test_frontend_dashboard.py::TestFrontendCheckinContract::test_checkin_request_format
+ERROR tests/public/test_frontend_dashboard.py::TestFrontendCheckinContract::test_checkin_response_format
+ERROR tests/public/test_frontend_dashboard.py::TestDashboardSessionContract::test_active_sessions_format
+ERROR tests/public/test_frontend_dashboard.py::TestDashboardSessionContract::test_session_details_format
+ERROR tests/public/test_frontend_dashboard.py::TestDashboardSessionContract::test_session_checkins_format
+ERROR tests/public/test_frontend_dashboard.py::TestDashboardMetricsContract::test_courses_list_format
+6 failed, 43 passed, 1 skipped, 29 errors in 12.64s

@@ -1,5 +1,12 @@
 # SAIV Grading Clarifications
 
+> **Current Module 2 policy (29 September 2026):** The user approved the
+> [public contract reductions](BACKEND-COMPLETION.md#approved-public-contract-reductions).
+> They supersede earlier conflicting examples only for optional liveness/GPS
+> accuracy, per-attempt GPS permission, keyless inventory, instructor reads,
+> the public course catalogue and the flagged response envelope. Other written
+> requirements and grading/security values continue to govern.
+
 These clarifications were announced after the original requirements were issued.
 They override conflicting values or behavior elsewhere in the project documentation.
 All other requirements remain unchanged.

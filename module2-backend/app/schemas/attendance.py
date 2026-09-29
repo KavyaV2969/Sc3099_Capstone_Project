@@ -91,7 +91,7 @@ class CheckinCreate(MutationModel):
     session_id: UUID4
     latitude: Latitude
     longitude: Longitude
-    location_accuracy_meters: float = Field(ge=0, allow_inf_nan=False)
+    location_accuracy_meters: float | None = Field(default=None, ge=0, allow_inf_nan=False)
     device_fingerprint: str = Field(min_length=1, max_length=64)
     liveness_challenge_response: str | None = Field(default=None, max_length=14_000_000)
     qr_code: str | None = Field(default=None, max_length=2000)
@@ -126,7 +126,7 @@ class CheckinResponse(BaseModel):
     verified_at: datetime | None = None
     latitude: float
     longitude: float
-    location_accuracy_meters: float
+    location_accuracy_meters: float | None
     distance_from_venue_meters: float
     status: CheckinStatus
     risk_score: float
@@ -173,12 +173,13 @@ class DeviceRegister(MutationModel):
     device_fingerprint: str = Field(min_length=1, max_length=64)
     device_name: str = Field(min_length=1, max_length=255)
     platform: Literal["ios", "android", "web", "desktop"]
-    public_key: str = Field(min_length=1, max_length=20_000)
+    public_key: str | None = Field(default=None, min_length=1, max_length=20_000)
+    browser: str | None = Field(default=None, max_length=255, exclude=True)
 
     @field_validator("public_key")
     @classmethod
-    def require_nonblank_key(cls, value: str) -> str:
-        if not value.strip():
+    def require_nonblank_key(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
             raise ValueError("public_key must not be blank")
         return value
 

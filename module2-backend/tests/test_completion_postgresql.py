@@ -311,3 +311,44 @@ def test_real_redis_challenge_consumption_is_atomic():
             return exc.status_code
     with ThreadPoolExecutor(2) as pool:
         assert sorted(pool.map(lambda _: consume(), range(2))) == [200, 403]
+
+
+def test_nullable_accuracy_upgrade_preserves_rows_and_refuses_lossy_downgrade(pg_database):
+    from alembic import command
+    from scripts.database_evidence import migration_config, snapshot
+    from sqlalchemy.exc import IntegrityError
+    from app.models import Checkin, Session as AttendanceSession
+    with pg_database.begin() as connection:
+        command.upgrade(migration_config(connection), "20260929_0008")
+    now = utc_now()
+    with Session(pg_database) as db:
+        user = User(email="accuracy@example.com", full_name="Accuracy", hashed_password="unused")
+        teacher = User(email="accuracy-teacher@example.com", full_name="Teacher", role="instructor", hashed_password="unused")
+        course = Course(code="ACCURACY", name="Accuracy", semester="AY26")
+        db.add_all([user, teacher, course]); db.flush()
+        session = AttendanceSession(course_id=course.id, instructor_id=teacher.id, name="Accuracy",
+            scheduled_start=now, scheduled_end=now+timedelta(hours=1), checkin_opens_at=now,
+            checkin_closes_at=now+timedelta(hours=1), venue_latitude=1.3483,
+            venue_longitude=103.6831, geofence_radius_meters=100)
+        db.add(session); db.flush()
+        item = Checkin(session_id=session.id, student_id=user.id, latitude=1.3483, longitude=103.6831,
+            location_accuracy_meters=10, distance_from_venue_meters=0, status="approved", risk_score=.2)
+        db.add(item); db.flush(); cid=item.id; db.commit()
+    with pg_database.begin() as connection:
+        before = snapshot(connection)
+        command.upgrade(migration_config(connection), "head")
+        assert snapshot(connection) == before
+    assert inspect_readiness(pg_database).healthy
+    with pg_database.begin() as connection:
+        command.downgrade(migration_config(connection), "20260929_0008")
+        command.upgrade(migration_config(connection), "head")
+        connection.execute(text("UPDATE checkins SET location_accuracy_meters=NULL WHERE id=:id"), {"id":cid})
+    with pytest.raises(RuntimeError, match="unknown GPS accuracy"):
+        with pg_database.begin() as connection:
+            command.downgrade(migration_config(connection), "20260929_0008")
+    assert inspect_readiness(pg_database).healthy
+    with pg_database.connect() as connection:
+        assert connection.scalar(text("SELECT location_accuracy_meters FROM checkins WHERE id=:id"), {"id":cid}) is None
+    with pytest.raises(IntegrityError):
+        with pg_database.begin() as connection:
+            connection.execute(text("UPDATE checkins SET location_accuracy_meters=-1 WHERE id=:id"), {"id":cid})

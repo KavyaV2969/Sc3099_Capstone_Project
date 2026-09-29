@@ -27,10 +27,9 @@ def test_openapi_contains_all_documented_backend_routes():
         "/api/v1/devices/register", "/api/v1/devices/my-devices", "/api/v1/devices/{device_id}",
         "/api/v1/enrollments/bulk", "/api/v1/export/attendance/{course_id}",
         "/api/v1/export/session/{session_id}", "/api/v1/admin/users/bulk",
-        "/api/v1/admin/enrollments/",
+        "/api/v1/admin/enrollments/", "/api/v1/audit/summary", "/api/v1/devices/",
     }
     assert expected <= paths
-    assert "/api/v1/audit/summary" not in paths
     assert "/api/v1/admin/devices" not in paths
 
 

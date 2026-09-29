@@ -96,7 +96,7 @@ def export_course(course_id: UUID4, request: Request, format: ExportFormat = Exp
                   database: Session = Depends(get_db),
                   user: User = Depends(require_roles(UserRole.INSTRUCTOR, UserRole.ADMIN))):
     course = get_course(database, str(course_id))
-    require_course_access(database, course, user, allow_ta=False)
+    require_course_access(database, course, user, allow_ta=False, read_only=True)
     query, coverage, count = _row_query(database, course_id=course.id, start_date=start_date, end_date=end_date)
     rows = _rows(database.get_bind(), query)
     write_audit_log(database, request, action="data_exported", user_id=user.id,
@@ -111,7 +111,7 @@ def export_session(session_id: UUID4, request: Request, format: ExportFormat = E
                    database: Session = Depends(get_db),
                    user: User = Depends(require_roles(UserRole.INSTRUCTOR, UserRole.ADMIN))):
     session = get_session(database, str(session_id))
-    course = require_session_access(database, session, user, allow_ta=False)
+    course = require_session_access(database, session, user, allow_ta=False, read_only=True)
     query, coverage, count = _row_query(database, session_id=session.id)
     rows = _rows(database.get_bind(), query)
     records = list(database.scalars(select(Checkin).where(Checkin.session_id == session.id,
@@ -127,7 +127,7 @@ def export_session(session_id: UUID4, request: Request, format: ExportFormat = E
         approved = sum(row["status"] == "approved" for row in rows)
         payload = {"summary": {"session_id": session.id, "total": len(rows), "approved": approved,
                                **summary},
-                   "checkins": rows, "coverage": coverage}
+                   "session_id": session.id, "checkins": rows, "records": rows, "coverage": coverage}
         return SafeJSONResponse(content=json.loads(json.dumps(payload, default=str)), headers={
             **_coverage_headers(coverage),
             "Content-Disposition": f'attachment; filename="{_safe(course.code + "-" + session.name)}.json"'})

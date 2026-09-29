@@ -1,6 +1,7 @@
 """Course and enrollment schemas."""
 
 from datetime import datetime
+from typing import Literal
 from app.config import default_risk_threshold
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, UUID4, field_validator, model_validator
 
@@ -17,6 +18,8 @@ class CourseCreate(MutationModel):
     venue_longitude: Longitude | None = None
     geofence_radius_meters: Radius = 100.0
     risk_threshold: RiskScore = Field(default_factory=default_risk_threshold)
+    # Legacy callers may affirm the mandatory device signal; it is not a toggle.
+    require_device_binding: Literal[True] | None = Field(default=None, exclude=True)
 
 
 class CourseUpdate(MutationModel):

@@ -1,0 +1,16 @@
+{'session_stats_count': 1, 'export_total': 0, 'export_approved_attendance': 1, 'export_records': 0, 'export_denominator_available': True}
+F{'approved_submissions': 1, 'approved_attendance': 0, 'eligible_roster': 1, 'checkin_status': 'approved'}
+F
+================================== FAILURES ===================================
+__ test_explicit_session_export_matches_statistics_across_singapore_midnight __
+tmp\backend-handover-audit\probes.py:28: in test_explicit_session_export_matches_statistics_across_singapore_midnight
+    assert exported['summary']['total']==stats['checked_in']
+E   assert 0 == 1
+_______ test_reactivation_adds_newly_eligible_student_to_active_roster ________
+tmp\backend-handover-audit\probes.py:45: in test_reactivation_adds_newly_eligible_student_to_active_roster
+    assert stats['approved_attendance']==stats['by_status']['approved']
+E   assert 0 == 1
+=========================== short test summary info ===========================
+FAILED tmp/backend-handover-audit/probes.py::test_explicit_session_export_matches_statistics_across_singapore_midnight
+FAILED tmp/backend-handover-audit/probes.py::test_reactivation_adds_newly_eligible_student_to_active_roster
+2 failed in 1.58s
