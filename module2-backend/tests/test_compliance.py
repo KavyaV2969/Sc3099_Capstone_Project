@@ -50,12 +50,14 @@ def test_all_id_paths_reject_non_uuid_values():
 def test_weighted_risk_uses_documented_bands_and_critical_rejection():
     medium = assess_risk(
         distance=0, radius=100, location_accuracy=5,
+        require_liveness=True, require_face=True,
         liveness_score=.8, liveness_passed=True, face_score=.8, face_passed=True,
         known_device=False, trusted_device=False, local_network=True, threshold=.5,
     )
     critical = assess_risk(
         distance=10, radius=100, location_accuracy=5,
-        liveness_score=.8, liveness_passed=False, face_score=.9, face_passed=True,
+        require_liveness=True, require_face=True,
+        liveness_score=.59, liveness_passed=False, face_score=.9, face_passed=True,
         known_device=True, trusted_device=True, local_network=True, threshold=.5,
     )
     assert medium.status == "approved"

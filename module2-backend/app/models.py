@@ -5,9 +5,10 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, false, true, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.types import TypeDecorator
+from app.config import default_risk_threshold
 
 
 def utc_now() -> datetime:
@@ -51,25 +52,29 @@ class User(Base):
         ),
         Index("ix_users_role", "role"),
         Index("ix_users_is_active", "is_active"),
+        CheckConstraint("failed_login_attempts >= 0", name="ck_users_failed_attempts"),
+        CheckConstraint("(activation_token_hash IS NULL) = (activation_expires_at IS NULL)", name="ck_users_activation_pair"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
-    role: Mapped[str] = mapped_column(String(20), nullable=False, default="student")
-    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    role: Mapped[str] = mapped_column(String(20), nullable=False, default="student", server_default="student")
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
     failed_login_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
-    camera_consent: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    geolocation_consent: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    face_enrolled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    camera_consent: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
+    geolocation_consent: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
+    face_enrolled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
     face_embedding_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now, server_default=text("CURRENT_TIMESTAMP"))
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now
+        DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now, server_default=text("CURRENT_TIMESTAMP")
     )
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     scheduled_deletion_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    activation_token_hash: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
+    activation_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class AuditLog(Base):
@@ -92,8 +97,8 @@ class AuditLog(Base):
     ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
     user_agent: Mapped[str | None] = mapped_column(String(500), nullable=True)
     details: Mapped[dict[str, Any] | list[Any] | str | None] = mapped_column(JSONText, nullable=True)
-    success: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    success: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now, server_default=text("CURRENT_TIMESTAMP"))
 
 
 class Course(Base):
@@ -114,7 +119,7 @@ class Course(Base):
     venue_latitude: Mapped[float | None] = mapped_column(Float)
     venue_longitude: Mapped[float | None] = mapped_column(Float)
     geofence_radius_meters: Mapped[float] = mapped_column(Float, default=100.0)
-    risk_threshold: Mapped[float] = mapped_column(Float, default=0.5)
+    risk_threshold: Mapped[float] = mapped_column(Float, default=default_risk_threshold)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
@@ -168,30 +173,36 @@ class Session(Base):
     geofence_radius_meters: Mapped[float] = mapped_column(Float)
     require_liveness_check: Mapped[bool] = mapped_column(Boolean, default=True)
     require_face_match: Mapped[bool] = mapped_column(Boolean, default=False)
-    risk_threshold: Mapped[float] = mapped_column(Float, default=0.5)
+    risk_threshold: Mapped[float] = mapped_column(Float, default=default_risk_threshold)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    attendance_roster: Mapped[list[str] | None] = mapped_column(JSONText, nullable=True)
 
 
 class Device(Base):
     __tablename__ = "devices"
     __table_args__ = (
-        UniqueConstraint("user_id", "device_fingerprint", name="uq_devices_user_fingerprint"),
+        UniqueConstraint("device_fingerprint", name="uq_devices_fingerprint"),
         CheckConstraint("trust_score IN ('low', 'medium', 'high')", name="ck_devices_trust_score"),
-        Index("ix_devices_user_active", "user_id", "is_active"),
+        Index("ix_devices_user_id", "user_id"),
+        Index("ix_devices_is_active", "is_active"),
+        Index("ix_devices_is_trusted", "is_trusted"),
+        CheckConstraint("total_checkins >= 0", name="ck_devices_checkin_count"),
+        CheckConstraint("revoked_at IS NULL OR (is_active = false AND is_trusted = false)", name="ck_devices_revocation"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
-    device_fingerprint: Mapped[str] = mapped_column(String(255), nullable=False)
-    device_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    platform: Mapped[str] = mapped_column(String(30), nullable=False)
+    device_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    device_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    platform: Mapped[str | None] = mapped_column(String(50), nullable=True)
     public_key: Mapped[str | None] = mapped_column(Text, nullable=True)
-    is_trusted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    trust_score: Mapped[str] = mapped_column(String(10), nullable=False, default="low")
-    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    is_trusted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
+    trust_score: Mapped[str] = mapped_column(String(20), nullable=False, default="low", server_default="low")
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
     first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
-    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    total_checkins: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    total_checkins: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class Checkin(Base):

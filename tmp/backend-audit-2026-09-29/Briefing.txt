@@ -1,0 +1,611 @@
+
+--- PAGE 1 ---
+SC3099
+Capstone Project
+Tianwei Zhang
+College of Computing and Data Science
+Nanyang Technological University
+--- PAGE 2 ---
+Teaching Team
+Course Coordinator:
+ Zhang Tianwei (Associate Professor @ CCDS): tianwei.zhang@ntu.edu.sg
+Project Designer:
+ Dr. Deng Gelei (Research Assistant Professor @ NTU): 
+gelei.deng@ntu.edu.sg 
+T eaching Assistants (PhD students @ NTU):
+ GOH XIN DEIK (Group 1-10): GOHX0043@e.ntu.edu.sg   
+ KORKMAZ MEHMET ANIL (Group 11-20): MEHMETAN001@e.ntu.edu.sg  
+ LIU SHUZHI (Group 21-30): SHUZHI001@e.ntu.edu.sg
+ SZE CHUN KIT (Group 31-40): CHUNKIT001@e.ntu.edu.sg  
+2
+--- PAGE 3 ---
+Project Vision
+Build a next-generation attendance verification system
+Real-world challenges you will tackle: 
+ Deepfake detection and face spoofing prevention
+ Replay attack mitigation
+ GPS spoofing detection
+ Remote/proxy sign-in prevention 
+This is what companies like Google, Apple, and banks deal with 
+daily
+3
+--- PAGE 4 ---
+What You Will Build
+A complete, production-grade attendance system
+ Student mobile app with face recognition
+ Backend API with security controls
+ Machine learning service for face verification
+ Instructor dashboard for monitoring 
+End-to-end system from frontend to database
+ 4 modules working together as microservices
+ Deployable with Docker containers
+4
+--- PAGE 5 ---
+System Architecture
+5
+Student 
+(Mobile/Web)
+Instructor 
+(Web)
+Users
+Frontend PWA
+(Next.js)
+:3000
+Dashboard 
+(Streamlit)
+:8501
+Application Service
+Backend API
+(FastAPI)
+:8000
+Face Recognition
+(FastAPI + MediaPipe)
+:8001
+PostgreSQL
+:5432
+Grafana
+:3001
+Infrastructure
+Redis
+:6379
+Prometheus
+:9090
+REST API
+REST API
+Internal API
+--- PAGE 6 ---
+What You Will Learn
+Full-stack web development
+ REST API design and implementation
+ Frontend/backend integration
+Security engineering
+ JWT authentication, bcrypt hashing
+ Rate limiting, input validation
+ GDPR-like compliance
+Machine learning integration
+ Face recognition
+DevOps & Observability
+ Runtime logging and monitoring
+6
+--- PAGE 7 ---
+Teamwork & Contact Hours
+T eam size: 4 students
+ Recommended: 1 person responsible for one module
+ All team members should understand the full system
+ Work with your teammates to determine a good distribution. 
+ It is OK to rebalance/redistribute work as you go along
+Deliverable: working docker-deployable system
+Weekly lab sessions: 9:30-11:20 every Friday, LT26
+ Week 1: briefing & Meet your team
+ Week 2-12: group meeting and discussion.
+7
+--- PAGE 8 ---
+Attendance Requirements
+Overall attendance [week 2-12] >= 80% required to pass
+ We will use Wooclap to record your attendance for each lab session. 
+ In a random moment within the lab (9:30-11:20am), a barcode will be 
+shown on screen. Use your phone to scan this barcode, and login with your 
+NTU account. 
+ Responses must be submitted within 5 minutes of barcode being displayed.
+ Exception will be given for students who have some technical problems 
+with the login. Then please come to the stage and register manually
+ Those who DO NOT fulfill the criteria will not be graded regardless of 
+your team’s performance, and will be required to retake capstone project.
+ Y ou may only know about it towards the end-of-semester.
+8
+--- PAGE 9 ---
+Assessment and Timeline
+9
+Group assessment (60%)
+System functionality testing
+(90 public tests)
+5% Week 12
+System feature testing
+(40 hidden tests)
+30% Week 12
+Live presentation 25% Week 12
+Individual assessment (40%)
+Early-stage peer review 5% Week 7
+Final-stage peer review 15% Week 12
+Individual quiz 20% 9:30-10:20am, Friday, Week 7
+--- PAGE 10 ---
+System Functionality and Feature Testing
+System functionality testing (5%)
+ Important functionality that you will need to complete your system, including 
+mobile app, security controls, machine learning algorithms, monitoring 
+mechanisms, etc. 
+ 90 public tests in the codebase. Y ou can run these during development, to 
+validate your implementation. 
+ For assessment, we will run your code and see how many tests it can pass.
+System feature testing (30%)
+ T est if your implementation can achieve different features. 
+ 40 hidden tests: not revealed to you. We use them to test edge cases and 
+advanced features. 
+HTTP-based testing: 
+ T ests send requests to your running services
+ Implementation-agnostic: any language works. 
+10
+--- PAGE 11 ---
+Live Presentation (25%)
+Report achievements and contributions
+ In lieu of a traditional written report + presentation
+ Demonstrate novelty, creativity, presentation skills, teamwork, etc. 
+ 10 minutes presentation + 3 minutes QA
+ Will be scheduled in Week 12
+Content to be featured
+ T eam members: introduce team members and responsibilities assigned. 
+ Implementations: highlight and communicate the team’s implementation of 
+various aspects of the project, covering different modules as well as their 
+integration as an entire system
+ Special achievements: highlight what else is special about your team’s effort 
+and the solutions that you have implemented.  
+11
+--- PAGE 12 ---
+Peer Evaluation (5% + 15%)
+Assess contributions to the design, planning and implementation 
+phases. Main aim is to prevent free-loaders in the team.
+ Confidential and anonymous
+ T wo stages: Week 7 (5%) and Week 12 (15%)
+ Students who get a peer evaluation score of less than 50% compared to the 
+rest of the members can have their final grade greatly reduced as compared 
+to the rest of the teammates. 
+ Important for each student to keep a record of his contribution to the team 
+to assist our investigation in the event of issues raised from the teammates. 
+Key points 
+ Y ou need to provide comments or valid reasons if the score is less than 5/10. 
+ Comments are also important when the score is 10/10. 
+ Scores without valid comments cannot be taken into consideration and 
+moderation will be done if necessary comments are unavailable. 
+12
+--- PAGE 13 ---
+Individual Quiz (20%)
+Quiz is divided into the following four topics that represent the major 
+modules of the project.
+ Mobile app with face recognition
+ Backend API with security controls
+ Machine learning service for face verification
+ Instructor dashboard for monitoring. 
+Quiz format and arrangement 
+ All MCQ.
+ Each student must choose a single quiz topic to take, and each group must 
+ensure that all the 4 topics are taken by the members. 
+ Quiz content will be based on the tasks and functionalities related to the system. 
+Y ou are expected to demonstrate good understanding of the tools you have 
+used to implement the required functionalities and features. 
+ Duration is 30 minutes. It is closed-book, and will be taken using the NTULearn 
+online assessment. 
+13
+--- PAGE 14 ---
+More details about the system
+--- PAGE 15 ---
+System Architecture
+4 Modules. Each module is a separate service that communicates 
+over HTTP . 
+Module 1: Frontend PWA (Student App).
+ Camera access, geolocation, check-in interface. 
+Module 2: Backend API (Core Business Logic) 
+ Authentication, courses, sessions, check-ins. 
+Module 3: Face Recognition Service (ML) 
+ Face enrollment, verification, liveness detection. 
+Module 4: Observability Dashboard (Instructor Portal) 
+ Session management, analytics, data export. 
+15
+--- PAGE 16 ---
+Technology Freedom
+Y ou can choose any tools.
+ Backend: FastAPI, Express.js, Spring Boot, Laravel, Go, etc.
+ Frontend: React, Vue, Angular, Svelte, vanilla JS, etc.
+ Database: PostgreSQL (recommended), MySQL, etc.
+ Face ML: MediaPipe, face-recognition, T ensorFlow, etc.
+ Dashboard: Streamlit, Dash, React, Django, etc.
+ ANY programming language that can serve HTTP endpoints!
+ Python, Java, JavaScript, PHP , Go, Rust, C# - all welcome. 
+Why T echnology-agnostic? 
+ Simulates real-world software development: Companies don't dictate your exact 
+tech stack; Focus on solving problems, not specific frameworks
+ T ests only check HTTP endpoint behavior: Black-box testing approach; Y our 
+internal code is YOUR business
+ Encourages architectural thinking: How do services communicate? What 
+contracts must be honored?
+16
+--- PAGE 17 ---
+Service Communication Flow
+Understand this flow thoroughly.
+ All requests go through the backend. 
+ It orchestrates calls to the face service and database. 
+ This separation of concerns is a key architectural pattern
+17
+
+--- PAGE 18 ---
+Infrastructure Provided (docker-compose)
+Key components
+ PostgreSQL database (port 5434): persistent storage for all data
+ Redis (port 6380): caching and rate limiting
+ Prometheus (port 9090): metrics collection
+ Grafana (port 3001): metrics visualization (admin/admin)
+ OpenT elemetry Collector: distributed tracking support
+18
+
+--- PAGE 19 ---
+Module 1: Frontend PWA
+Progressive Web App for students
+Key features to implement
+ User authentication (login/register forms)
+ Camera access with WebRTC (browser API for camera access)
+ Liveness challenge UI (blink, head turn), preventing photo attacks. 
+ Geolocation consent and capture
+ Device fingerprinting
+ Check-in workflow (session -> camera -> location -> submit)
+Must work on mobile browsers
+19
+--- PAGE 20 ---
+Module 2: Backend API
+Core business logic - the heart of the system
+Key responsibilities
+ JWT authentication & token refresh
+ Role-based access control (student/ta/instructor/admin)
+ User, Course, Session, Enrollment management
+ Check-in processing with risk assessment
+ Rate limiting (Redis-based)
+ Audit logging for compliance
+~50 API endpoints to implement
+20
+--- PAGE 21 ---
+Module 3: Face Recognition Service
+Machine learning microservice
+ Use MediaPipe or similar libraries for face detection and landmark extraction
+Key endpoints
+ POST /face/enroll - Generate face template
+ POST /face/verify - Match face to template
+ POST /liveness/check - Detect spoofing
+CRITICAL privacy requirement
+ NO raw face images stored anywhere
+ Only hashes of face templates
+ Images processed in memory only
+21
+--- PAGE 22 ---
+Module 4: Observability Dashboard
+Instructor analytics portal: observe who checks in, identify 
+suspicious activities, and export attendance for grading
+Key features
+ Login with instructor credentials
+ Session management (create, activate, close)
+ View all check-ins for a session
+ Review flagged check-ins (approve/reject)
+ Attendance statistics and charts
+ Export data to CSV/JSON for gradebook
+Real-time updates preferred
+22
+--- PAGE 23 ---
+Database Schema
+8 Tables
+ users - Student/instructor accounts with roles
+ courses - Course metadata, geofence settings
+ enrollments - Student-course relationships
+ sessions - Class sessions with check-in windows
+ checkins - Attendance records with risk scores
+ devices - Device binding for security
+ risk_signals - Multi-signal risk data per check-in
+ audit_logs - Immutable event logs for compliance: once written, they cannot 
+be modified or deleted.
+Full schema in docs/DATABASE-SCHEMA.md
+23
+--- PAGE 24 ---
+Security: Authentication & Authorization
+JWT-based authentication
+ Access token: 1 hour expiry
+ T okens should never contain sensitive data. They are only for authentication
+ Refresh token: 7 days expiry
+ HS256 signing algorithm
+ Ignore security restrictions about the roles during registration. 
+Password requirements:
+ Never store plaintext passwords!
+ Minimum 8 characters
+ bcrypt hashing with cost >= 10: the hash takes about 100ms to compute, which 
+slows down brute force attacks. 
+Role-based access control (RBAC):
+ student, ta, instructor, admin
+ Each endpoint has role requirements
+ Check API-SPECIFICATION.md for detailed access rules of each role. 
+24
+--- PAGE 25 ---
+Security: Rate Limiting & Validation
+Rate limiting: prevent brute-force attacks and DoS
+ Use Redis to track requests counts with TTL-based expiry.
+ Login: 60 attempts/hour per IP
+ API requests: 1000/hour per user
+ Check-ins: 10/minute per user
+ Registration: 10/hour per IP
+Input validation:
+ Prevent SQL injection
+ Sanitize XSS payloads
+ Validate email formats. 
+Geofencing with Haversine distance formula
+ Calculate distance between GPS coordinates on Earth’s surface
+25
+--- PAGE 26 ---
+Security: Device Binding & Anti-Fraud
+Device binding
+ Each student registers their device
+ Check-ins from unknown devices flagged
+Liveness detection (anti-spoofing):
+ Detect printed photos
+ Detect screen replay attacks
+ 3D depth analysis with face mesh. 
+Risk scoring algorithm
+ Combine multiple signals, including liveness, location, device trust, timing signals
+ Flag high-risk check-ins for review
+Impossible travel detection
+26
+--- PAGE 27 ---
+Privacy: Design Principles
+GDPR-like compliance built into the design
+Key principles
+ Data minimization - collect only what's needed
+ Purpose limitation - use data only for stated purpose
+ Explicit consent - users must opt-in
+ Right to deletion - users can request data removal 
+Consent tracking
+ Camera consent flag
+ Geolocation consent flag
+ Both must be TRUE before check-in
+27
+--- PAGE 28 ---
+Privacy: Data Handling Rules
+Face data
+ NO raw face images stored
+ Only hashes (64 hex characters)
+ Images processed in memory, then deleted
+Location data
+ Only used for geofence check
+ Stored with limited precision
+Personal data
+ 30-day auto-deletion policy
+ scheduled_deletion_at field in users table. 
+28
+--- PAGE 29 ---
+Privacy: Audit & Compliance
+Immutable audit logs
+ Cannot be modified or deleted
+ Using append-only tables or write-once storage.
+ Track all security-relevant events
+18 tracked action types
+ login_success, login_failed, logout
+ checkin_approved, checkin_flagged, checkin_rejected
+ user_created, face_enrolled, device_registered
+ And more...
+Export capability for compliance audits
+29
+--- PAGE 30 ---
+System Functionality: 90 Public Tests
+30
+T est Category Points Focus Area
+API Functional 26 CRUD operations, authentication, 
+check-ins
+Face Recognition 15 Enrollment, matching, liveness, privacy
+Security Basic 12 Auth, authorization, input validation, rate 
+limiting
+Observability 12 Dashboard stats, session management, 
+export
+Privacy Basic 8 Consent, data minimization, retention
+Frontend/Dashboard 8 Contract compliance, integration
+Performance 5 Latency < 2s, 10 concurrent users
+Integration 4 End-to-end workflows
+--- PAGE 31 ---
+System Feature: 40 Hidden Tests
+31
+T est Category Points Focus Area
+Advanced Security 12 GPS spoofing detection, Replay attack 
+prevention, Network security
+Privacy Audit 8 Database inspection for raw images, 
+Encryption verification
+Face Recognition 
+Advanced 
+10 Anti-spoofing with real attack images
+Liveness 3
+Stress T esting 7 100 concurrent users
+--- PAGE 32 ---
+How Testing Works
+T ests are black-box HTTP requests
+ No code inspection - only endpoint behavior matters
+ T ests create their own data via API calls
+ Admin endpoints required for test setup.
+Environment setup
+ export TEST_BACKEND_URL=http://localhost:8000
+ export TEST_FACE_URL=http://localhost:8001
+Run tests
+ python3 -m pytest tests/public/ -v
+32
+--- PAGE 33 ---
+Suggested Timeline for Development
+33
+Phase Weeks Focus
+Foundation 1-2 Environment Setup
+Core Backend 2-4 Basic Backend API and Authentication
+ML Service 5-6 Face Recognition Integration
+Backend Integration 7 Integrate API with Face Recognition
+User Interfaces 8-9 Frontend PWA & Dashboard
+Polish 10 Performance & Privacy
+Hardening 11 Edge Cases & Hidden T ests
+Presentation 12 Live Presentation & Documentation
+--- PAGE 34 ---
+Suggested Timeline for Development
+Week 1: Project setup
+ Set up development environment (Docker, databases)
+ Implement basic user registration and login
+ T arget: Get familiar with the target system
+Week 2: Authentication, user management & authorization
+ Implement basic login feature
+ Role-based access control (student, TA, instructor, admin)
+ User profile management
+ JWT-based authentication
+ T arget: RBAC system complete.
+34
+--- PAGE 35 ---
+Suggested Timeline for Development
+Week 3: Courses & Sessions
+ Course CRUD operations
+ Session management with status workflow
+ Enrollment system
+ T arget: Course and session APIs functional
+Week 4: Check-in Core
+ Check-in submission endpoint
+ Geofence validation (distance calculation)
+ Check-in status logic (approved/flagged/rejected)
+ T arget: Basic check-in flow working
+35
+--- PAGE 36 ---
+Suggested Timeline for Development
+Week 5: Face recognition - Core
+ Set up face recognition service
+ Face detection with MediaPipe
+ Face enrollment and representation generation
+ T arget: Face enrollment working
+Week 6: Face recognition - Advanced
+ Face verification/matching
+ Risk assessment endpoint
+ Backend integration with face service
+ T arget: Full face recognition pipeline
+36
+--- PAGE 37 ---
+Suggested Timeline for Development
+Week 7: Integration
+ Connect all components in the backend API
+ Connect database with the real face recognition system
+ Integrate face recognition system into the API
+ T arget: Student enroll faces and check in via backend
+Week 8: Frontend PWA
+ Authentication UI
+ Camera capture (WebRTC)
+ Geolocation integration
+ Check-in flow
+ T arget: Student can check in via mobile/web
+37
+--- PAGE 38 ---
+Suggested Timeline for Development
+Week 9: Instructor dashboard
+ Session management interface
+ Attendance analytics
+ Flagged check-in review
+ Export functionality
+ T arget: Instructors can manage attendance
+Week 10: Performance & Privacy
+ Database optimization (indexes, queries)
+ Concurrent request handling
+ Data retention policies
+ Privacy compliance
+ T arget: Pass performance and privacy tests
+38
+--- PAGE 39 ---
+Suggested Timeline for Development
+Week 11: Hidden T ests & Edge Cases
+ GPS spoofing detection
+ Replay attack prevention
+ Anti-spoofing (photos, screens)
+ Stress testing (50+ concurrent users)
+ Complete audit trail
+ T arget: Maximize hidden test scores
+Week 12: Presentation & Demo
+ Prepare presentation slides
+ Final documentation and code
+ T arget: Conduct live presentation
+39
+--- PAGE 40 ---
+Course Materials on NTULearn
+Group allocation
+ Randomly assigned, following college policy. 
+ Does not support group reassignment
+Slides
+ Briefing
+ T echnical materials for the designs of 4 modules
+Codebase
+More will be added with the progress of this course
+40
+--- PAGE 41 ---
+Getting Started: Study the Codebase
+Documentation (docs/ folder)
+ API-SPECIFICATION.md - Complete API documentation
+ DATABASE-SCHEMA.md - All 8 tables defined
+ SECURITY-REQUIREMENTS.md - Auth, rate limiting specs
+ INTEGRATION-GUIDE.md - Module communication
+Sample images (sample_images/)
+ Face images for testing enrollment/matching
+Public test suite (tests/public/)
+ 90 points of tests you can run
+Docker Compose for infrastructure
+41
+--- PAGE 42 ---
+Getting Started: Quick Start
+1. Download the code repository
+2. Read ALL documentation in docs/ folder
+3. Start infrastructure: 
+ docker-compose up -d postgres redis
+4. Choose your tech stack for each module
+5. Implement endpoints one category at a time
+6. Run public tests frequently to validate
+7. Integrate modules and test end-to-end
+8. Iterate until all public tests pass
+42
+--- PAGE 43 ---
+Getting Started: Running Tests
+Install test dependencies: 
+ pip install -r requirements-test.txt
+Start your services
+ docker-compose up -d
+Set environment variables
+ export TEST_BACKEND_URL=http://localhost:8000
+ export TEST_FACE_URL=http://localhost:8001
+Run public tests
+ python3 -m pytest tests/public/ -v
+43
+--- PAGE 44 ---
+Tips: Common Pitfalls to Avoid
+PRIVACY VIOLATION: Storing raw face images
+SECURITY FAIL: Plaintext passwords
+TEST FAILURE: Missing admin endpoints
+TEST FAILURE: Forgetting session activation endpoint
+ Sessions must be 'active' before check-ins work!
+PERFORMANCE: N+1 database queries
+BEST PRACTICES:
+ Read ALL documentation first
+ Run tests early and often
+ Implement admin endpoints first
+44
+--- PAGE 45 ---
+What Do You Do Today?
+Find your teammates.
+Start discussing division of responsibilities. 
+Determine who gets what part of the system to play with, etc. 
+Let us know if your teammates cannot be approached. 
+Timing from week 2 onwards: Friday 9:30 – 11:20am, LT26.
+45
+--- PAGE 46 ---
+Seat Map
+46
+Platform
+Group 1 - 10 Group 11 - 20 Group 21 - 30 Group 31 - 40
+TA: GOH XIN DEIK TA: KORKMAZ 
+MEHMET ANIL 
+TA: LIU SHUZHI TA: SZE CHUN KIT 
+--- PAGE 47 ---
+Any Questions?

@@ -2,6 +2,8 @@
 from functools import lru_cache
 from ipaddress import ip_address, ip_network
 import json
+import logging
+from time import monotonic
 from math import asin, cos, radians, sin, sqrt
 from pathlib import Path
 
@@ -10,6 +12,9 @@ from fastapi import HTTPException
 from redis.exceptions import RedisError
 
 from app.rate_limit import get_redis_client
+from app.metrics import dependency_duration
+
+logger = logging.getLogger(__name__)
 
 LOCAL_NETWORKS = tuple(ip_network(cidr) for cidr in (
     "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7",
@@ -68,11 +73,13 @@ def ip_is_in_singapore(value: str) -> bool:
     # Reserved/documentation/multicast addresses are not campus addresses.
     if not address.is_global or address.is_multicast:
         return False
+    started, category = monotonic(), "cache_hit"
     try:
         cache = get_redis_client()
         key = f"geo:country:{address}"
         country = cache.get(key)
         if country is None:
+            category = "provider_success"
             response = httpx.get(f"https://ipwho.is/{address}",
                                  params={"fields": "success,country_code"}, timeout=3.0)
             response.raise_for_status()
@@ -85,5 +92,9 @@ def ip_is_in_singapore(value: str) -> bool:
             country = country.upper()
             cache.setex(key, 86400, country)
         return country == "SG"
-    except (httpx.HTTPError, RedisError, ValueError):
+    except (httpx.HTTPError, RedisError, ValueError) as exc:
+        category = "cache_error" if isinstance(exc, RedisError) else "provider_error"
+        logger.warning("IP country dependency unavailable category=%s", category)
         raise HTTPException(status_code=503, detail="IP country lookup unavailable; retry later") from None
+    finally:
+        dependency_duration.labels("ip_country", category).observe(monotonic() - started)

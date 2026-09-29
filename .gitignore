@@ -4,3 +4,11 @@
 # Locally generated or working documentation. Keep grading overrides trackable.
 docs/*
 !docs/GRADING-CLARIFICATIONS.md
+!docs/F00-DATABASE-RECOVERY.md
+!docs/CHECKIN-VERIFICATION-REPAIR.md
+!docs/BACKEND-COMPLETION.md
+.env
+
+# Private PostgreSQL backups, recovery evidence and disposable test outputs.
+tmp/f00-recovery/
+tmp/backend-completion-private/

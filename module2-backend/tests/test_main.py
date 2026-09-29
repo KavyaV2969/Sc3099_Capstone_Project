@@ -3,12 +3,13 @@
 from fastapi.testclient import TestClient
 
 from app import main
+from app.schema_contract import DatabaseReadiness
 
 client = TestClient(main.app)
 
 
 def test_health_reports_healthy_dependencies(monkeypatch) -> None:
-    monkeypatch.setattr(main, "database_is_healthy", lambda: True)
+    monkeypatch.setattr(main, "database_readiness", lambda: DatabaseReadiness(True, "healthy"))
     monkeypatch.setattr(main, "redis_is_healthy", lambda: True)
     response = client.get("/health")
 
@@ -19,11 +20,12 @@ def test_health_reports_healthy_dependencies(monkeypatch) -> None:
         "api": "healthy",
         "database": "healthy",
         "redis": "healthy",
+        "schema": "healthy",
     }
 
 
 def test_health_reports_unavailable_dependencies(monkeypatch) -> None:
-    monkeypatch.setattr(main, "database_is_healthy", lambda: False)
+    monkeypatch.setattr(main, "database_readiness", lambda: DatabaseReadiness(False, "unknown"))
     monkeypatch.setattr(main, "redis_is_healthy", lambda: True)
 
     response = client.get("/health")

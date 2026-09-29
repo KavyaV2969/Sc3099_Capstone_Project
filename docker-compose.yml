@@ -9,15 +9,15 @@ services:
     image: postgres:15-alpine
     container_name: saiv-postgres
     environment:
-      POSTGRES_USER: saiv
-      POSTGRES_PASSWORD: saiv_password
-      POSTGRES_DB: saiv
+      POSTGRES_USER: ${POSTGRES_USER:-saiv}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set a private operator password}
+      POSTGRES_DB: ${POSTGRES_DB:-saiv}
     ports:
-      - "5434:5432"
+      - "127.0.0.1:5434:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U saiv"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -28,7 +28,9 @@ services:
     image: redis:7-alpine
     container_name: saiv-redis
     ports:
-      - "6380:6379"
+      - "127.0.0.1:6380:6379"
+    volumes:
+      - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -41,20 +43,41 @@ services:
   # Application Services (Students implement these)
   # ==========================================================================
 
+  backend-migrate:
+    build:
+      context: ./module2-backend
+      dockerfile: Dockerfile
+    image: saiv-backend:local
+    command: ["sh", "-c", "alembic upgrade head && python -m scripts.configure_database_roles"]
+    environment:
+      DATABASE_URL: ${MIGRATION_DATABASE_URL:?Set the migration/operator database URL}
+      BACKEND_DATABASE_URL: ${BACKEND_DATABASE_URL:?Set a restricted application database URL}
+      DASHBOARD_DATABASE_URL: ${DASHBOARD_DATABASE_URL:-}
+      SECRET_KEY: ${SECRET_KEY:?Set a private JWT secret}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - saiv-network
+
   backend:
     build:
       context: ./module2-backend
       dockerfile: Dockerfile
     container_name: saiv-backend
+    image: saiv-backend:local
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
-      DATABASE_URL: postgresql://saiv:saiv_password@postgres:5432/saiv
+      DATABASE_URL: ${BACKEND_DATABASE_URL:?Set a restricted application database URL}
       REDIS_URL: redis://redis:6379
-      SECRET_KEY: your-secret-key-change-in-production
-      FACE_SERVICE_URL: http://face-recognition:8001
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      SECRET_KEY: ${SECRET_KEY:?Set a private JWT secret}
+      FACE_SERVICE_URL: ${FACE_SERVICE_URL:-http://face-recognition:8001}
+      PUBLIC_FRONTEND_URL: ${PUBLIC_FRONTEND_URL:-http://localhost:3000}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:8501}
     depends_on:
+      backend-migrate:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -82,11 +105,13 @@ services:
     build:
       context: ./module1-frontend
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${PUBLIC_BACKEND_URL:-http://localhost:8000/api/v1}
     container_name: saiv-frontend
     ports:
       - "3000:3000"
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NEXT_PUBLIC_API_URL: ${PUBLIC_BACKEND_URL:-http://localhost:8000/api/v1}
       NEXT_PUBLIC_FACE_SERVICE_URL: http://localhost:8001
     depends_on:
       - backend
@@ -101,7 +126,7 @@ services:
     ports:
       - "8501:8501"
     environment:
-      DATABASE_URL: postgresql://saiv:saiv_password@postgres:5432/saiv
+      DATABASE_URL: ${DASHBOARD_DATABASE_URL:-}
       BACKEND_URL: http://backend:8000
       PROMETHEUS_URL: http://prometheus:9090
     depends_on:
@@ -162,5 +187,7 @@ networks:
 
 volumes:
   postgres_data:
+  redis_data:
+    name: ${REDIS_VOLUME_NAME:-student-starter_redis_data}
   prometheus_data:
   grafana_data:

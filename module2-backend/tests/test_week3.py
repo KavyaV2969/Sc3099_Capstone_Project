@@ -76,6 +76,7 @@ def course(api):
 def session_payload(course):
     start = utc_now() + timedelta(minutes=5)
     return {"course_id": course["id"], "name": "Lecture 1", "session_type": "lecture",
+            "require_liveness_check": False, "require_face_match": False,
             "scheduled_start": start.isoformat(), "scheduled_end": (start + timedelta(hours=1)).isoformat()}
 
 
@@ -143,7 +144,8 @@ def test_course_ownership_and_instructor_validation(api, course):
     assert api.request("DELETE", path).status_code == 403
     assert api.request("PUT", path, "admin", json={"instructor_id": str(uuid4())}).status_code == 404
     assert api.request("PUT", path, "admin", json={"instructor_id": api.users["student"].id}).status_code == 400
-    assert api.request("POST", "/courses/", "admin", json=course).status_code == 400
+    assert api.request("POST", "/courses/", "admin", json={
+        "code": course["code"], "name": course["name"], "semester": course["semester"]}).status_code == 400
     assert api.request("GET", f"/courses/{uuid4()}").status_code == 404
     assert api.request("GET", "/courses/", None).status_code == 401
 
@@ -260,9 +262,9 @@ def test_session_lists_are_scoped_and_public_window_filtered(api, ready, course)
     assert api.request("GET", "/sessions/active", None).json() == []
 
 
-@pytest.mark.parametrize("latitude,status,risk", [(1.3483, "approved", 0.0),
-                                                 (1.34965, "flagged", 0.5),
-                                                 (1.351, "rejected", 1.0)])
+@pytest.mark.parametrize("latitude,status,risk", [(1.3483, "approved", 0.2),
+                                                 (1.34965, "approved", 0.35),
+                                                 (1.351, "rejected", 0.35)])
 def test_checkin_geofence_stored_with_audit(api, ready, latitude, status, risk):
     response = api.request("POST", "/checkins/", "student", json=checkin_payload(ready, latitude=latitude))
     assert response.status_code == 201, response.text
@@ -314,6 +316,8 @@ def test_checkin_window_enforced(api, ready, when):
 @pytest.mark.parametrize("consent", ["camera_consent", "geolocation_consent"])
 def test_checkin_requires_consent(api, ready, consent):
     with api.database() as database:
+        if consent == "camera_consent":
+            database.get(Session, ready["id"]).require_liveness_check = True
         setattr(database.get(User, api.users["student"].id), consent, False)
         database.commit()
     assert api.request("POST", "/checkins/", "student", json=checkin_payload(ready)).status_code == 403
@@ -343,7 +347,7 @@ def test_checkin_coordinate_validation(api, ready, changes):
     assert api.request("POST", "/checkins/", "student", json=checkin_payload(ready, **changes)).status_code == 422
 
 
-@pytest.mark.parametrize("multiple,status", [(1, "approved"), (0.999, "flagged"), (0.5, "flagged"), (0.499, "rejected")])
+@pytest.mark.parametrize("multiple,status", [(1, "approved"), (0.999, "approved"), (0.5, "approved"), (0.499, "rejected")])
 def test_exact_geofence_boundaries(api, ready, multiple, status):
     distance = haversine_distance(1.3483, 103.6831, 1.3493, 103.6831)
     with api.database() as database:

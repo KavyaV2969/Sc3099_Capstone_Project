@@ -497,9 +497,9 @@ Update a session. **Requires auth (instructor only, must be session owner).**
 **Response:** `200 OK` - Returns updated session object
 
 **Status Transitions:**
-- `scheduled` → `active`: Opens check-in window
-- `active` → `closed`: Closes check-in, finalizes attendance
-- Any status → `cancelled`: Cancels session
+- `scheduled` â†’ `active`: Opens check-in window
+- `active` â†’ `closed`: Closes check-in, finalizes attendance
+- Any status â†’ `cancelled`: Cancels session
 
 #### DELETE /sessions/{session_id}
 Delete a session. **Requires auth (instructor only, must be session owner).**
@@ -528,7 +528,7 @@ This endpoint also enforces the graded Singapore-only GPS and client-IP rules in
   "longitude": 103.6831,
   "location_accuracy_meters": 10.0,
   "device_fingerprint": "unique_device_id",
-  "liveness_challenge_response": "base64_encoded_image",  // Optional
+  "liveness_challenge_response": "base64_encoded_image",  // Required when either verification flag is true
   "qr_code": "session_qr_code"  // Optional, if session requires QR
 }
 ```
@@ -553,16 +553,41 @@ This endpoint also enforces the graded Singapore-only GPS and client-IP rules in
 }
 ```
 
+**Verification requirements:** The image is optional only when both
+`require_liveness_check` and `require_face_match` are false. Otherwise it must be
+nonblank. Every enabled check must return complete validated evidence. Disabled
+checks are not called and return null biometric fields; their weights are not
+redistributed. Bonus liveness must be disabled explicitly when unavailable.
+
+Backend scoring is local (`weighted-v1`), using Security's five weights. Liveness
+and face risk are `1 - score`. Device risk is 0 for an active owned trusted device,
+0.5 for an active owned untrusted device, and 1 otherwise. Geolocation risk is
+`min(1, distance/radius)`, increased by 0.25 and capped at 1 when accuracy exceeds
+radius. Network detection remains unavailable and contributes zero in the current
+backend; this does not establish freedom from VPN/proxy use. Device lookup is not
+cryptographic device proof. Positive factors include `risk`, `weight`,
+`contribution`, `severity`, and a `critical` flag. Scores are rounded to four decimal
+places before applying the decision table. The outcome audit records the policy,
+effective threshold, enabled checks and all contributions without image/hash data.
+
+Explicit session thresholds override the course threshold. New courses without an
+explicit threshold use `RISK_SCORE_THRESHOLD` (default 0.50). Existing course/session
+thresholds retain their persisted values.
+
 **Check-in Status Logic:**
 | Risk Score | Critical Signals | Result |
 |------------|------------------|--------|
-| < threshold | None | `approved` |
-| >= threshold | None | `flagged` (requires review) |
-| Any | Liveness failed | `rejected` |
+| < threshold and < 0.70 | None | `approved` |
+| >= threshold and < 0.70 | None | `flagged` (requires review) |
+| Any | Liveness or face matching failed | `rejected` |
+| >= 0.70 | Any | `rejected`, even if the session threshold is higher |
 | Any | GPS > 2x geofence | `rejected` |
 
 **Error Responses:**
-- `400 Bad Request`: Session not active, check-in window closed, already checked in
+- `400 Bad Request`: Session not active, check-in window closed, already checked in, missing required image, or image rejected by the face service
+- `503 Service Unavailable`: Required verification is unavailable or its response is malformed/inconsistent; no check-in is created
+- `409 Conflict`: Verification flags or enrolled reference changed during processing; reload session requirements and submit a new check-in
+- `401 Unauthorized` / `403 Forbidden`: Account, role, consent or enrollment became ineligible
 - `404 Not Found`: Session not found
 
 #### GET /checkins/
@@ -899,6 +924,13 @@ Device management for security and trust scoring.
 #### POST /devices/register
 Register a new device. **Requires auth.**
 
+The fingerprint is 1â€“64 characters and globally unique. `public_key` is required
+and must be nonblank on registration and re-registration. A fingerprint belonging
+to another user, including a concurrent registration conflict, returns HTTP 400.
+Legacy stored names/platforms may be null in read responses; new registrations
+still require both fields. Existing null public keys are preserved during the F00
+transition described in `recommended_design/DATABASE-SCHEMA.md`.
+
 **Request:**
 ```json
 {
@@ -1183,6 +1215,19 @@ Export check-in data for a session. **Requires auth (instructor for session).**
 
 This service handles face enrollment, face matching, liveness detection, and risk assessment.
 It is called internally by the Backend API and does not require authentication.
+
+The backend validates endpoint-specific results. Pass flags must be JSON booleans;
+scores/thresholds must be finite JSON numbers in [0,1]. Verification requires
+`match_passed`, `match_score`, `match_threshold` (0.70), and `face_detected`.
+Liveness requires `liveness_passed`, `liveness_score`, and `liveness_threshold`
+(0.60). Pass flags must agree with these cutoffs; a match cannot pass without a
+face. Successful enrollment requires the documented hash, quality and detection
+confidence. Optional template hashes are validated when present. Additional fields
+are allowed. Empty/inconsistent results, unexpected HTTP statuses, transport errors
+and invalid JSON produce controlled backend HTTP 503 rather than attendance approval.
+Service HTTP 400/422 maps to backend HTTP 400. Successful service status is 201 for
+enrollment and 200 for verification/liveness.
+
 
 > **Note:** Liveness detection (`/liveness/check`) is a **BONUS feature** due to its complexity.
 > The core required features are face enrollment and face matching.
@@ -1963,3 +2008,12 @@ if face_result.get("enrollment_successful"):
     user.face_enrolled = True
     db.commit()
 ```
+# Implemented backend contract â€” 29 September 2026
+
+For implemented Module 2 behavior, the completion contract in
+[BACKEND-COMPLETION.md](BACKEND-COMPLETION.md) takes precedence over older examples
+in this document. It specifies activation, signed device challenges, retained
+attendance denominators, input bounds, error/retry behavior and correlation.
+Existing response arrays/envelopes and `/api/v1` paths remain compatible.
+Unsupported mutation fields return 422; nonblank QR input is unsupported.
+Statistics attendance rates can be null when historical denominators are unknown.

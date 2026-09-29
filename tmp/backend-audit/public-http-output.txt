@@ -1,0 +1,132 @@
+............FFF........................F...........FFFF...F..FF.F.....FF [ 97%]
+..                                                                       [100%]
+================================== FAILURES ===================================
+_________________ TestCheckInWorkflow.test_successful_checkin _________________
+tests\public\test_api_functional.py:191: in test_successful_checkin
+    assert response.status_code == 201
+E   assert 403 == 201
+E    +  where 403 = <Response [403 Forbidden]>.status_code
+______________ TestCheckInWorkflow.test_duplicate_checkin_fails _______________
+tests\public\test_api_functional.py:210: in test_duplicate_checkin_fails
+    assert first_response.status_code == 201, f"First check-in should succeed: {first_response.text}"
+E   AssertionError: First check-in should succeed: {"detail":[{"type":"missing","loc":["body","location_accuracy_meters"],"msg":"Field required","url":"https://errors.pydantic.dev/2.5/v/missing"}]}
+E   assert 422 == 201
+E    +  where 422 = <Response [422 Unprocessable Entity]>.status_code
+__________________ TestCheckInWorkflow.test_list_my_checkins __________________
+tests\public\test_api_functional.py:238: in test_list_my_checkins
+    assert len(data) > 0
+E   assert 0 > 0
+E    +  where 0 = len([])
+___________ TestFrontendCheckinContract.test_checkin_request_format ___________
+tests\public\test_frontend_dashboard.py:103: in test_checkin_request_format
+    assert response.status_code in [201, 400]  # 400 if already checked in
+E   assert 403 in [201, 400]
+E    +  where 403 = <Response [403 Forbidden]>.status_code
+___________________ TestStatsEndpoints.test_stats_overview ____________________
+tests\public\test_observability.py:29: in test_stats_overview
+    assert "total_courses" in data
+E   AssertionError: assert 'total_courses' in {'active_sessions': 0, 'approval_rate': 0.0, 'average_attendance_rate': 0.0, 'average_risk_score': 0.0, ...}
+____________________ TestStatsEndpoints.test_stats_session ____________________
+tests\public\test_observability.py:54: in test_stats_session
+    assert "checked_in_count" in data
+E   AssertionError: assert 'checked_in_count' in {'attendance_rate': 0.0, 'average_checkin_time_minutes': 0.0, 'average_distance_meters': 0.0, 'average_risk_score': 0.0, ...}
+____________________ TestStatsEndpoints.test_stats_course _____________________
+tests\public\test_observability.py:68: in test_stats_course
+    assert response.status_code == 200
+E   assert 403 == 200
+E    +  where 403 = <Response [403 Forbidden]>.status_code
+____________________ TestStatsEndpoints.test_stats_student ____________________
+tests\public\test_observability.py:87: in test_stats_student
+    assert response.status_code == 200
+E   assert 403 == 200
+E    +  where 403 = <Response [403 Forbidden]>.status_code
+____________ TestEnrollmentManagement.test_list_course_enrollments ____________
+tests\public\test_observability.py:177: in test_list_course_enrollments
+    assert response.status_code == 200
+E   assert 403 == 200
+E    +  where 403 = <Response [403 Forbidden]>.status_code
+______________ TestCheckinFiltering.test_flagged_checkins_queue _______________
+tests\public\test_observability.py:234: in test_flagged_checkins_queue
+    assert "items" in data
+E   AssertionError: assert 'items' in []
+___________ TestExportEndpoints.test_export_session_attendance_json ___________
+tests\public\test_observability.py:257: in test_export_session_attendance_json
+    assert "session_id" in data
+E   AssertionError: assert 'session_id' in {'checkins': [], 'summary': {'approved': 0, 'attendance_rate': 0.0, 'session_id': '5235fc21-4b54-4121-b5ba-46f97a8f4af4', 'total': 0}}
+__________________ TestAuditLogFiltering.test_audit_summary ___________________
+tests\public\test_observability.py:293: in test_audit_summary
+    assert response.status_code == 200
+E   assert 404 == 200
+E    +  where 404 = <Response [404 Not Found]>.status_code
+______________ TestDeviceManagement.test_list_all_devices_admin _______________
+tests\public\test_observability.py:388: in test_list_all_devices_admin
+    assert response.status_code == 200
+E   assert 404 == 200
+E    +  where 404 = <Response [404 Not Found]>.status_code
+___________ TestEndToEndCheckIn.test_complete_student_checkin_flow ____________
+tests\public\test_integration.py:101: in test_complete_student_checkin_flow
+    assert checkin_resp.status_code == 201
+E   assert 422 == 201
+E    +  where 422 = <Response [422 Unprocessable Entity]>.status_code
+- generated xml file: C:\Users\Lenovo\Desktop\Study\SC3099\student-starter\tmp\backend-audit\public-http-results.xml -
+=============================== SCORING SUMMARY ===============================
+
+  test_api_functional.py: 20.0/28.0 pts (13/16 tests)
+    \u2717 test_successful_checkin: 0/3 pts
+    \u2717 test_duplicate_checkin_fails: 0/3 pts
+    \u2717 test_list_my_checkins: 0/2 pts
+  test_frontend_dashboard.py: 7.0/8.0 pts (7/8 tests)
+    \u2717 test_checkin_request_format: 0/1 pts
+  test_integration.py: 2.0/4.0 pts (2/3 tests)
+    \u2717 test_complete_student_checkin_flow: 0/2 pts
+  test_observability.py: 5.0/12.0 pts (5/12 tests)
+    \u2717 test_stats_overview: 0/1 pts
+    \u2717 test_stats_session: 0/1 pts
+    \u2717 test_stats_course: 0/1 pts
+    \u2717 test_stats_student: 0/1 pts
+    \u2717 test_list_course_enrollments: 0/1 pts
+    \u2717 test_flagged_checkins_queue: 0/1 pts
+    \u2717 test_export_session_attendance_json: 0/1 pts
+  test_privacy_basic.py: 8.0/8.0 pts (8/8 tests)
+  test_security_basic.py: 12.0/12.0 pts (12/12 tests)
+
+--------------------------------------  ---------------------------------------
+  By Category:
+    auth_security: 4.0/4.0 pts
+    authentication: 5.0/5.0 pts
+    authorization: 4.0/4.0 pts
+    checkin: 0.0/8.0 pts
+    consent: 3.0/3.0 pts
+    courses: 4.0/4.0 pts
+    dashboard_contract: 4.0/4.0 pts
+    data_minimization: 3.0/3.0 pts
+    data_retention: 2.0/2.0 pts
+    devices: 2.0/2.0 pts
+    frontend_contract: 3.0/4.0 pts
+    input_validation: 3.0/3.0 pts
+    integration: 0.0/2.0 pts
+    observability_bonus: 5.0/12.0 pts
+    performance: 2.0/2.0 pts
+    rate_limiting: 1.0/1.0 pts
+    sessions: 4.0/4.0 pts
+    user_management: 5.0/5.0 pts
+
+  TOTAL SCORE: 54.0/72.0 (75.0%)
+  LETTER GRADE: C
+======================================  =======================================
+=========================== short test summary info ===========================
+FAILED tests/public/test_api_functional.py::TestCheckInWorkflow::test_successful_checkin
+FAILED tests/public/test_api_functional.py::TestCheckInWorkflow::test_duplicate_checkin_fails
+FAILED tests/public/test_api_functional.py::TestCheckInWorkflow::test_list_my_checkins
+FAILED tests/public/test_frontend_dashboard.py::TestFrontendCheckinContract::test_checkin_request_format
+FAILED tests/public/test_observability.py::TestStatsEndpoints::test_stats_overview
+FAILED tests/public/test_observability.py::TestStatsEndpoints::test_stats_session
+FAILED tests/public/test_observability.py::TestStatsEndpoints::test_stats_course
+FAILED tests/public/test_observability.py::TestStatsEndpoints::test_stats_student
+FAILED tests/public/test_observability.py::TestEnrollmentManagement::test_list_course_enrollments
+FAILED tests/public/test_observability.py::TestCheckinFiltering::test_flagged_checkins_queue
+FAILED tests/public/test_observability.py::TestExportEndpoints::test_export_session_attendance_json
+FAILED tests/public/test_observability.py::TestAuditLogFiltering::test_audit_summary
+FAILED tests/public/test_observability.py::TestDeviceManagement::test_list_all_devices_admin
+FAILED tests/public/test_integration.py::TestEndToEndCheckIn::test_complete_student_checkin_flow
+14 failed, 60 passed in 22.33s

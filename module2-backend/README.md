@@ -1,116 +1,113 @@
-# Module 2 — Week 3 Backend API
+# Module 2 — Backend
 
-This implementation provides database-backed authentication and the core
-Course → Enrollment → Session → Check-in flow.
+The backend implements authentication, course/session/enrollment workflows,
+bulk account activation, signed device proof, weighted check-in assessment,
+review/appeal, retained attendance reporting/export, immutable auditing, privacy
+cleanup and Prometheus metrics. See the
+[completion contract](../docs/BACKEND-COMPLETION.md) and
+[implementation report](../output/backend-completion-2026-09-29.md).
 
-## Implemented API
+Backend implementation is complete for the agreed scope. Real biometric
+integration remains blocked: the supplied Module 3 operations return 501 and
+a functioning external implementation is required. Enabled biometric checks are
+preserved; successful mocks do not certify real face-service interoperability.
 
-Base path: `/api/v1`
+## Run and configure
 
-| Method | Path | Access |
-|---|---|---|
-| POST | `/auth/register` | Public |
-| POST | `/auth/login` | Public |
-| POST | `/auth/refresh` | Refresh token |
-| GET | `/users/me` | Authenticated |
-| PUT | `/users/me` | Authenticated |
-| PATCH | `/admin/users/{user_id}/deactivate` | Admin |
-| PATCH | `/admin/users/{user_id}/activate` | Admin |
-| GET | `/audit/` | Admin |
-| GET | `/courses/`, `/courses/{course_id}` | Authenticated |
-| POST | `/courses/` | Admin |
-| PUT | `/courses/{course_id}` | Admin (partial update) |
-| DELETE | `/courses/{course_id}` | Admin (soft delete) |
-| GET | `/enrollments/my-enrollments` | Student |
-| GET | `/enrollments/course/{course_id}` | Course instructor, assigned TA, or admin |
-| POST | `/enrollments/` | Course instructor or admin |
-| DELETE | `/enrollments/{enrollment_id}` | Course instructor or admin |
-| GET | `/sessions/` | Instructor (own sessions) or admin |
-| GET | `/sessions/active` | Public; active courses and open check-in windows only |
-| GET | `/sessions/my-sessions`, `/sessions/{session_id}` | Authenticated |
-| POST | `/sessions/` | Instructor (optional course assignment enforced) |
-| PATCH, DELETE | `/sessions/{session_id}` | Session owner (instructor) |
-| POST | `/checkins/` | Actively enrolled student |
-
-Authentication uses HS256 JWTs: access tokens expire after one hour and refresh
-tokens after seven days. Passwords use bcrypt cost 12. Role values are
-`student`, `ta`, `instructor`, and `admin`.
-
-## Database scope
-
-The initial Alembic migration intentionally creates only:
-
-- `users` — required for authentication, profile consent, and account status
-- `audit_logs` — immutable security events for registration, login, profile
-  updates, and activation/deactivation
-
-Migration `20260908_0002_attendance_tables.py` adds `courses`, `enrollments`,
-`sessions`, `checkins`, and a two-column `course_tas` assignment table.
-IDs retain the documented `VARCHAR(36)` UUID representation. Enrollment and
-check-in uniqueness is enforced in the database. No Week 2 tables are altered.
-
-TA assignments must currently be seeded directly in `course_tas`; no assignment
-management endpoint is specified for Week 3. The API checks both the TA role and
-the assignment before exposing a course roster.
-
-Enrollment deletion removes the enrollment row, permitting later re-enrollment;
-existing check-ins remain. Course deletion only sets `is_active=false` and also
-prevents new enrollments, sessions, and check-ins for that course.
-
-## Week 3 workflow and limits
-
-1. Admin creates a course with venue coordinates; `instructor_id` is optional.
-2. Instructor/admin enrolls an existing student through `POST /enrollments/`.
-3. Instructor creates a session with a future start and a later end.
-4. Instructor activates it with `PATCH /sessions/{id}` and `{"status":"active"}`.
-5. Student grants consent through the existing `PUT /users/me`, then submits
-   `session_id`, `latitude`, `longitude`, `location_accuracy_meters`, and
-   `device_fingerprint` to `POST /checkins/` during the check-in window.
-6. Instructor closes it with `{"status":"closed"}`.
-
-Sessions inherit omitted venue/geofence/risk settings from the course. Both venue
-coordinates must be available when creating a session. The default check-in
-window is 15 minutes before through 30 minutes after scheduled start. Timestamps
-without a timezone are treated as UTC. Partial updates validate the resulting
-schedule/window, including fields retained from the existing session.
-
-Allowed transitions are scheduled → active → closed, and scheduled/active →
-cancelled. Closed and cancelled are terminal, following the Week 3 instructions
-over the broader cancellation language in the API specification. Only scheduled
-sessions can be deleted. Activation does not override the configured check-in window.
-
-The Week 3 GPS rule is: distance ≤ radius approves; distance ≤ twice the radius
-flags; greater distances reject. Scores are respectively 0, 0.5, and 1; the stored
-risk threshold is reserved for the later risk engine. All three outcomes create a
-record and return 201. Duplicate attempts return 400. Geolocation consent is always
-required; camera consent is required when the session requests liveness or face
-matching. Those checks are not performed yet, and liveness response fields are null.
-The device fingerprint is accepted but not persisted or used for device binding.
-
-Deferred: optional bulk enrollment/account creation, TA assignment administration,
-check-in history/review/appeal APIs, face/liveness integration, device binding,
-advanced fraud/risk processing, statistics, and exports. No raw camera images are stored.
-
-## Tests
-
-From `module2-backend`, run:
+From the repository root, copy `.env.example` to private ignored `.env` and
+replace the deliberately invalid secret placeholder. Supply separate operator,
+application and optional read-only dashboard database URLs. PostgreSQL password
+changes require explicit role rotation for an existing database; changing the
+container environment alone does not rotate the stored password.
 
 ```powershell
-python -m pytest tests -q
+docker compose up -d --build postgres redis backend
 ```
 
-Week 3 tests use temporary SQLite databases, actual JWT authentication, and a
-stubbed Redis rate limiter. They cover ownership/RBAC, defaults, partial-update
-validation, transitions, enrollment, consent, check-in windows, duplicate records,
-geofence boundaries, and the end-to-end flow. Migration tests exercise upgrade,
-downgrade, ORM schema comparison, and PostgreSQL SQL generation. The existing
-PostgreSQL health test requires the configured local database to be running.
+The migration job applies canonical migrations and provisions restricted roles
+before starting the application. The backend never receives operator credentials.
+Published ports are loopback-only: backend 8000, PostgreSQL 5434, Redis 6380.
+Preserve existing volumes; `REDIS_VOLUME_NAME` supports an existing data volume.
+The browser build-time API base must include `http://localhost:8000/api/v1`.
+Set `FACE_SERVICE_URL` to the real service when available. For host-side tooling
+use explicit `127.0.0.1` database/Redis URLs to avoid Windows IPv6 fallback delays.
 
-Public HTTP tests require a live backend. Course creation now accepts the provided
-fixture without `instructor_id`, following the revised specification. The session
-fixture still activates through a deferred admin endpoint, and the check-in
-fixtures omit consent setup (and sometimes accuracy). These remaining integration
-requirements are separate from the upstream course-field correction.
+The production image includes the complete recovery/verification source set.
+The current canonical head is `20260929_0008`. Legacy recovery first verifies
+the historical `20260928_0006` destination, then applies the normal forward
+completion migrations. See the [recovery runbook](../docs/F00-DATABASE-RECOVERY.md).
+`/health` requires database connectivity, exact frozen schema/ORM, enabled audit
+integrity objects and Redis. It does not check biometric capability.
+
+## Implemented API and behavior
+
+OpenAPI is available at `/docs`; all API routes use `/api/v1`.
+
+| Area | Supported operations |
+|---|---|
+| Authentication | Register, login, refresh, single-use activation |
+| Users | Own profile/consent, face enrollment, deletion scheduling; scoped profile reads; admin directory/update |
+| Courses | Authenticated list/read, admin create/update/soft delete |
+| Enrollment | Current lists/rosters, single/bulk enrollment, secure optional account creation, withdrawal |
+| Sessions | Create, list/discover/read, owner/admin update, guarded deletion, documented admin override |
+| Check-ins | Eligibility/verification/scoring, own/scoped history, detail, appeal, staff review |
+| Devices | Register/list/update/remove, key validation/revocation, signed check-in challenges |
+| Reports | Overview/session/course/student statistics; CSV/JSON exports |
+| Audit/operations | Admin audit querying; immutable storage; retention worker; `/health` and `/metrics` |
+
+HS256 access tokens last one hour and refresh tokens seven days. Passwords use
+bcrypt cost 10 by default. Refresh issues another pair without revoking the old
+refresh token. Ten consecutive bad passwords block login, including attempt ten;
+documented admin activation resets the counter. Grading rate limits are preserved.
+
+Instructors read/review only courses assigned to them or containing sessions they
+own. Course read/review permission does not grant mutation of another instructor's
+session. Administrators retain access and assigned TAs retain documented course
+permissions. CourseTA provisioning uses the idempotent operator SQL in the
+completion contract; no unnecessary TA-management endpoint was added.
+
+Check-ins require active course/student/enrollment/session/window, appropriate
+consents, Singapore/local IP and GPS eligibility, and one record per student/session.
+Enabled face/liveness checks require valid service evidence. Missing evidence
+returns 400, dependency failure 503, and changed policy/reference hash 409, with
+no attendance row. Valid failed verification persists a rejected check-in (201).
+Clients must inspect returned status rather than count all 201 responses as success.
+Five fixed risk weights and critical rejection rules are preserved. Unsigned
+devices receive unknown-device risk; registered/trusted scoring requires verified
+single-use key possession proof. Impossible travel flags review. The network
+user-agent hint is a heuristic, not verified VPN detection.
+
+Attendance rates use approved eligible students / retained historical roster,
+never submissions. Reports disclose 30-day coverage and unknown denominators as
+null; status/submission counts remain separate. Session dates use Asia/Singapore.
+CSV formulas are neutralized and exports stream bounded batches. Mutation inputs
+reject unsupported fields, nonblank QR input and oversized image/request data.
+QR issuance, standalone attestation, duplicate risk-signal storage, extra metadata,
+email delivery, refresh rotation/logout, paid network reputation and OTLP export
+are intentionally deferred. Backend request IDs, trace-context propagation and
+required metrics are implemented.
+
+## Verification
+
+From `module2-backend`, use the repository Python 3.11 virtual environment and
+set private `DATABASE_URL`, `F00_POSTGRES_TEST_URL`, `REDIS_URL`, `SECRET_KEY`,
+`F00_BACKUP_MANIFEST` and, for Docker restore transport, `F00_POSTGRES_CONTAINER`.
+Use an operator URL only for the isolated PostgreSQL test database factory;
+ordinary application tests can use the restricted role. Backups contain private
+data and remain ignored. Disable the cleanup worker during the test process.
+
+```powershell
+..\.venv\Scripts\python.exe -m pytest tests -q
+```
+
+The final report records fresh full-suite, pinned Linux image, PostgreSQL/Redis,
+migration/recovery, deployment/restart, Prometheus and 10/100-user HTTP evidence.
+Do not disable verification flags to make the outstanding real biometric gate pass.
+
+## Historical evidence
+
+The dated sections below describe earlier states; the current contract above
+takes precedence.
 
 ### Live Week 3 verification (2026-09-08)
 
@@ -243,3 +240,19 @@ Verified after the update: 122 backend tests passed; all four public course/sess
 tests passed (8/8 points for that selection). Docker startup applied migration
 `20260911_0004` to PostgreSQL, and `alembic check` found no schema differences.
 The full public suite was not rerun for this update.
+
+
+## Check-in verification repair (28 September 2026)
+
+All new check-ins use one weighted scorer. Enabled biometrics require a nonblank
+image and strict service results; valid failures persist rejected attendance,
+while missing evidence or dependency failures create no check-in. Finalization
+refreshes locked eligibility and returns 409 if verification policy changed.
+New course risk defaults honor RISK_SCORE_THRESHOLD; existing thresholds persist.
+See [verification contract and rollout](../docs/CHECKIN-VERIFICATION-REPAIR.md).
+
+For complete PostgreSQL regression checks, set F00_POSTGRES_TEST_URL and
+F00_BACKUP_MANIFEST. Set F00_POSTGRES_CONTAINER to the PostgreSQL container name
+when pg_restore runs through Docker; otherwise install the PostgreSQL client tools.
+Recovery tests restore the immutable dump into fresh disposable databases and do
+not modify the operator's committed rehearsal.

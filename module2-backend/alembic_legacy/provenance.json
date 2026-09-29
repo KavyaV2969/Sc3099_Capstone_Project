@@ -1,0 +1,47 @@
+{
+  "description": "Recovered applied but uncommitted September 11 migration history. See docs/F00-DATABASE-RECOVERY.md.",
+  "files": {
+    "20260911_0005_week4_integration.py": {
+      "sha256": "c0e7bca308ba9923e0c3010670829c6e65ef7139d51b443170655006dea91e74",
+      "source_session": "C:\\Users\\Lenovo\\.codex\\sessions\\2026\\09\\11\\rollout-2026-09-11T10-15-27-01a07f3c-eb3e-78b1-a25b-4076c69e85e3_01a08e3f-975f-7932-8904-6c38bf423dbf.jsonl",
+      "source_line": 120,
+      "timestamp": "2026-09-11T02:24:40.688Z",
+      "amendment": null
+    },
+    "20260911_0006_docs_alignment.py": {
+      "sha256": "1b770b9196bf5cbce4f6aad518465dfff8c70a67d942cd407278adccf9fd84a8",
+      "source_session": "C:\\Users\\Lenovo\\.codex\\sessions\\2026\\09\\11\\rollout-2026-09-11T10-39-00-01a07f3c-eb3e-78b1-a25b-4076c69e85e3_01a08e55-2683-7c61-977c-964f2c8b5fb5.jsonl",
+      "source_line": 107,
+      "timestamp": "2026-09-11T02:45:05.463Z",
+      "amendment": null
+    },
+    "20260911_0007_documented_storage.py": {
+      "sha256": "5ec49512191b58409cfb03e92eb032ff9a7e67769c564460bb94fe9976ed7d6d",
+      "source_session": "C:\\Users\\Lenovo\\.codex\\sessions\\2026\\09\\11\\rollout-2026-09-11T10-39-00-01a07f3c-eb3e-78b1-a25b-4076c69e85e3_01a08e55-2683-7c61-977c-964f2c8b5fb5.jsonl",
+      "source_line": 197,
+      "timestamp": "2026-09-11T02:53:43.110Z",
+      "amendment": {
+        "session": "C:\\Users\\Lenovo\\.codex\\sessions\\2026\\09\\11\\rollout-2026-09-11T10-39-00-01a07f3c-eb3e-78b1-a25b-4076c69e85e3_01a08e55-2683-7c61-977c-964f2c8b5fb5.jsonl",
+        "timestamp": "2026-09-11T02:54:03.137Z",
+        "description": "Drop and restore the risk_factors default around its JSON/TEXT conversion."
+      }
+    },
+    "20260825_0001_auth_tables.py": {
+      "sha256": "c8e20a302ad99e7ecc0552aba15777fe9d6cd69d87de263c9e7331de5ea531ef",
+      "source": "canonical prerequisite migration, unchanged"
+    },
+    "20260908_0002_attendance_tables.py": {
+      "sha256": "f8f3ec8fbeaecc261adc4ff13e14554316cc2135f9cd8b3c8c64bcab9c45c563",
+      "source": "canonical prerequisite migration, unchanged"
+    },
+    "20260911_0003_login_lockout.py": {
+      "sha256": "e85a0790f8121a16ecd8671d8102b9b0a2a2321f787a9d646c756788d99d3de4",
+      "source": "canonical prerequisite migration, unchanged"
+    },
+    "20260911_0004_optional_course_instructor.py": {
+      "sha256": "feaa7cec44426afd206951b72b390b0d223c6927097f726b1c4ee33b845e2656",
+      "source": "canonical prerequisite migration, unchanged"
+    }
+  },
+  "checksum_format": "sha256 of source bytes with CRLF normalized to LF; canonical prerequisite code is unchanged"
+}

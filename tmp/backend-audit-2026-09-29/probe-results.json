@@ -1,0 +1,97 @@
+[
+  {
+    "case": "session_owner_relationship",
+    "roster": 200,
+    "profile": 403,
+    "stats": 403
+  },
+  {
+    "case": "same_course_different_session_owner",
+    "own_list": 1,
+    "other_session_roster": 200,
+    "other_session_export": 200
+  },
+  {
+    "case": "student_stats_cross_course",
+    "http": 200,
+    "courses": [
+      "PRIVATE",
+      "SC3099"
+    ]
+  },
+  {
+    "case": "bulk_enrollment_inactive_course",
+    "http": 200,
+    "body": {
+      "enrolled": 1,
+      "already_enrolled": 0,
+      "not_found": 0,
+      "created": 0,
+      "details": [
+        {
+          "email": "other_student@example.com",
+          "status": "enrolled"
+        }
+      ]
+    }
+  },
+  {
+    "case": "revoked_device_reregistered_with_changed_key",
+    "initial_trust_http": 200,
+    "http": 201,
+    "active": true,
+    "trusted": true
+  },
+  {
+    "case": "rejected_attendance_denominator",
+    "http": 201,
+    "status": "rejected",
+    "stats_attendance_rate": 1.0,
+    "export_attendance_rate": 0.0
+  },
+  {
+    "case": "delete_admin_rescheduled_with_checkin",
+    "exception": "IntegrityError"
+  },
+  {
+    "case": "documented_bulk_account_creation",
+    "http": 422,
+    "body": {
+      "detail": "create_accounts is unsupported because no secure credential recovery contract exists"
+    }
+  },
+  {
+    "case": "audit_update_delete",
+    "deleted": true
+  },
+  {
+    "case": "injected_unique_conflict_register",
+    "exception": "IntegrityError"
+  },
+  {
+    "case": "injected_unique_conflict_bulk_users",
+    "exception": "NameError"
+  },
+  {
+    "case": "injected_unique_conflict_enroll",
+    "exception": "IntegrityError"
+  },
+  {
+    "case": "injected_unique_conflict_bulk_enroll",
+    "exception": "IntegrityError"
+  },
+  {
+    "case": "injected_unique_conflict_admin_enroll",
+    "exception": "IntegrityError"
+  },
+  {
+    "case": "csv_and_cors",
+    "formula_unescaped": true,
+    "exposed_headers": null
+  },
+  {
+    "case": "route_inventory",
+    "backend_operations": 50,
+    "metrics_present": false
+  }
+]

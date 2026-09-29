@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
+from key_fixtures import PUBLIC_KEY
 from fastapi import Depends, Request
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
@@ -13,7 +14,7 @@ from sqlalchemy.pool import StaticPool
 from app.db import get_db
 from app.dependencies import get_current_user
 from app.main import app
-from app.face_service import FaceResult
+from app.face_service import EnrollmentResult
 from app.models import AuditLog, Base, Checkin, Course, Device, Enrollment, Session as AttendanceSession, User
 
 
@@ -34,6 +35,7 @@ def compliance_api():
                    instructor_id=ids["instructor"], venue_latitude=1.3483, venue_longitude=103.6831),
             Enrollment(student_id=ids["student"], course_id=ids["course"]),
             AttendanceSession(id=ids["session"], course_id=ids["course"], instructor_id=ids["instructor"],
+                              attendance_roster=[ids["student"]],
                               name="Review Session", status="closed", scheduled_start=now - timedelta(hours=1),
                               scheduled_end=now, checkin_opens_at=now - timedelta(hours=1, minutes=15),
                               checkin_closes_at=now - timedelta(minutes=30), venue_latitude=1.3483,
@@ -70,8 +72,8 @@ def test_seeded_statistics_are_zero_safe_and_consistent(compliance_api):
     student = client.get(f"/api/v1/stats/students/{ids['student']}").json()
     assert overview["total_sessions"] == 1 and overview["approval_rate"] == 0
     assert session["checked_in"] == 1 and session["risk_distribution"]["high"] == 1
-    assert course["total_enrolled"] == 1 and course["overall_attendance_rate"] == 1
-    assert student["courses"][0]["attendance_rate"] == 1
+    assert course["total_enrolled"] == 1 and course["overall_attendance_rate"] == 0
+    assert student["courses"][0]["attendance_rate"] == 0
 
 
 def test_appeal_review_and_audit_transitions(compliance_api):
@@ -99,7 +101,7 @@ def test_devices_bulk_enrollment_and_exports(compliance_api):
     device = client.post(
         "/api/v1/devices/register", headers={"x-test-user": "student"},
         json={"device_fingerprint": "fingerprint", "device_name": "Phone",
-              "platform": "ios", "public_key": "public-key"},
+              "platform": "ios", "public_key": PUBLIC_KEY},
     )
     assert device.status_code == 201
     device_id = device.json()["id"]
@@ -148,8 +150,9 @@ def test_user_visibility_admin_updates_and_face_hash_only(compliance_api, monkey
 
     async def fake_enroll(user_id: str, image: str):
         assert user_id == ids["student"] and image == "transient-image"
-        return FaceResult(
-            enrollment_successful=True, face_template_hash="a" * 64, quality_score=.9
+        return EnrollmentResult(
+            enrollment_successful=True, face_template_hash="a" * 64, quality_score=.9,
+            details={"face_detected": True, "face_detection_confidence": .95},
         )
 
     monkeypatch.setattr("app.routers.users.enroll_face", fake_enroll)

@@ -3,6 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import UUID4
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.audit import write_audit_log
@@ -16,7 +17,7 @@ from app.schemas import (
     EnrollmentResponse, UserRole,
 )
 from app.security import hash_password
-from app.services.enrollments import create_enrollment
+from app.services.enrollments import create_enrollment, capture_roster
 
 router = APIRouter(prefix="/admin", tags=["administration"])
 admin_only = require_roles(UserRole.ADMIN)
@@ -32,6 +33,8 @@ def _set_account_status(
     user = database.scalar(select(User).where(User.id == str(user_id)).with_for_update())
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user not found")
+    if active and (user.activation_token_hash or user.scheduled_deletion_at):
+        raise HTTPException(status_code=400, detail="pending activation or deletion cannot be overridden")
     user.is_active = active
     if active:
         user.failed_login_attempts = 0
@@ -114,11 +117,12 @@ def set_session_status(
     database: Session = Depends(get_db),
     admin: User = Depends(admin_only),
 ) -> AdminSessionStatusResponse:
-    session = database.scalar(select(AttendanceSession).where(AttendanceSession.id == str(session_id)).with_for_update())
-    if session is None:
-        raise HTTPException(status_code=404, detail="session not found")
+    from app.services.access import get_session_for_mutation
+    session = get_session_for_mutation(database, str(session_id))
     previous = session.status
     session.status = payload.status.value
+    if session.status == "active" and previous == "scheduled":
+        capture_roster(database, session)
     write_audit_log(
         database, request, action="session_status_updated", user_id=admin.id,
         resource_type="session", resource_id=session.id,

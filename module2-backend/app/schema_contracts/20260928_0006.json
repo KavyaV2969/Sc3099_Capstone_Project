@@ -1,0 +1,1165 @@
+{
+  "dialect": "postgresql",
+  "generated_from": "empty PostgreSQL 15 database using frozen migrations",
+  "revision": "20260928_0006",
+  "tables": {
+    "audit_logs": {
+      "checks": [],
+      "columns": {
+        "action": {
+          "default": null,
+          "nullable": false,
+          "type": "varchar(100)"
+        },
+        "details": {
+          "default": null,
+          "nullable": true,
+          "type": "text"
+        },
+        "device_id": {
+          "default": null,
+          "nullable": true,
+          "type": "varchar(36)"
+        },
+        "id": {
+          "default": null,
+          "nullable": false,
+          "type": "varchar(36)"
+        },
+        "ip_address": {
+          "default": null,
+          "nullable": true,
+          "type": "varchar(45)"
+        },
+        "resource_id": {
+          "default": null,
+          "nullable": true,
+          "type": "varchar(36)"
+        },
+        "resource_type": {
+          "default": null,
+          "nullable": true,
+          "type": "varchar(50)"
+        },
+        "success": {
+          "default": "true",
+          "nullable": false,
+          "type": "boolean"
+        },
+        "timestamp": {
+          "default": "current_timestamp",
+          "nullable": false,
+          "type": "timestamp with time zone"
+        },
+        "user_agent": {
+          "default": null,
+          "nullable": true,
+          "type": "varchar(500)"
+        },
+        "user_id": {
+          "default": null,
+          "nullable": true,
+          "type": "varchar(36)"
+        }
+      },
+      "foreign_keys": [
+        {
+          "columns": [
+            "user_id"
+          ],
+          "name": "audit_logs_user_id_fkey",
+          "options": {
+            "ondelete": "SET NULL"
+          },
+          "referred_columns": [
+            "id"
+          ],
+          "schema": "public",
+          "table": "users"
+        }
+      ],
+      "indexes": [
+        {
+          "columns": [
+            "action"
+          ],
+          "expressions": null,
+          "include": [],
+          "name": "ix_audit_logs_action",
+          "options": {
+            "postgresql_include": []
+          },
+          "unique": false
+        },
+        {
+          "columns": [
+            "resource_type",
+            "resource_id"
+          ],
+          "expressions": null,
+          "include": [],
+          "name": "ix_audit_logs_resource",
+          "options": {
+            "postgresql_include": []
+          },
+          "unique": false
+        },
+        {
+          "columns": [
+            "timestamp"
+          ],
+          "expressions": null,
+          "include": [],
+          "name": "ix_audit_logs_timestamp",
+          "options": {
+            "postgresql_include": []
+          },
+          "unique": false
+        },
+        {
+          "columns": [
+            "user_id"
+          ],
+          "expressions": null,
+          "include": [],
+          "name": "ix_audit_logs_user_id",
+          "options": {
+            "postgresql_include": []
+          },
+          "unique": false
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique_constraints": []
+    },
+    "checkins": {
+      "checks": [
+        {
+          "expression": "location_accuracy_meters >= 0::double precision",
+          "name": "ck_checkins_accuracy"
+        },
+        {
+          "expression": "distance_from_venue_meters >= 0::double precision",
+          "name": "ck_checkins_distance"
+        },
+        {
+          "expression": "latitude >= '-90'::integer::double precision and latitude <= 90::double precision",
+          "name": "ck_checkins_latitude"
+        },
+        {
+          "expression": "longitude >= '-180'::integer::double precision and longitude <= 180::double precision",
+          "name": "ck_checkins_longitude"
+        },
+        {
+          "expression": "risk_score >= 0::double precision and risk_score <= 1::double precision",
+          "name": "ck_checkins_risk"
+        },
+        {
+          "expression": "status::text = any (array['pending'::character varying, 'approved'::character varying, 'flagged'::character varying, 'rejected'::character varying, 'appealed'::character varying])",
+          "name": "ck_checkins_status"
+        }
+      ],
+      "columns": {
+        "appeal_reason": {
+          "default": null,
+          "nullable": true,
+          "type": "text"
+        },
+        "appealed_at": {
+          "default": null,
+          "nullable": true,
+          "type": "timestamp with time zone"
+        },
+        "checked_in_at": {
+          "default": null,
+          "nullable": false,
+          "type": "timestamp with time zone"
+        },
+        "device_id": {
+          "default": null,
+          "nullable": true,
+          "type": "varchar(36)"
+        },
+        "distance_from_venue_meters": {
+          "default": null,
+          "nullable": false,
+          "type": "double precision"
+        },
+        "face_match_passed": {
+          "default": null,
+          "nullable": true,
+          "type": "boolean"
+        },
+        "face_match_score": {
+          "default": null,
+          "nullable": true,
+          "type": "double precision"
+        },
+        "id": {
+          "default": null,
+          "nullable": false,
+          "type": "varchar(36)"
+        },
+        "latitude": {
+          "default": null,
+          "nullable": false,
+          "type": "double precision"
+        },
+        "liveness_passed": {
+          "default": null,
+          "nullable": true,
+          "type": "boolean"
+        },
+        "liveness_score": {
+          "default": null,
+          "nullable": true,
+          "type": "double precision"
+        },
+        "location_accuracy_meters": {
+          "default": null,
+          "nullable": false,
+          "type": "double precision"
+        },
+        "longitude": {
+          "default": null,
+          "nullable": false,
+          "type": "double precision"
+        },
+        "review_notes": {
+          "default": null,
+          "nullable": true,
+          "type": "text"
+        },
+        "reviewed_at": {
+          "default": null,
+          "nullable": true,
+          "type": "timestamp with time zone"
+        },
+        "reviewed_by_id": {
+          "default": null,
+          "nullable": true,
+          "type": "varchar(36)"
+        },
+        "risk_factors": {
+          "default": null,
+          "nullable": true,
+          "type": "text"
+        },
+        "risk_score": {
+          "default": null,
+          "nullable": false,
+          "type": "double precision"
+        },
+        "scheduled_deletion_at": {
+          "default": null,
+          "nullable": false,
+          "type": "timestamp with time zone"
+        },
+        "session_id": {
+          "default": null,
+          "nullable": false,
+          "type": "varchar(36)"
+        },
+        "status": {
+          "default": null,
+          "nullable": false,
+          "type": "varchar(20)"
+        },
+        "student_id": {
+          "default": null,
+          "nullable": false,
+          "type": "varchar(36)"
+        },
+        "verified_at": {
+          "default": null,
+          "nullable": true,
+          "type": "timestamp with time zone"
+        }
+      },
+      "foreign_keys": [
+        {
+          "columns": [
+            "session_id"
+          ],
+          "name": "checkins_session_id_fkey",
+          "options": {},
+          "referred_columns": [
+            "id"
+          ],
+          "schema": "public",
+          "table": "sessions"
+        },
+        {
+          "columns": [
+            "student_id"
+          ],
+          "name": "checkins_student_id_fkey",
+          "options": {},
+          "referred_columns": [
+            "id"
+          ],
+          "schema": "public",
+          "table": "users"
+        },
+        {
+          "columns": [
+            "device_id"
+          ],
+          "name": "fk_checkins_device",
+          "options": {
+            "ondelete": "SET NULL"
+          },
+          "referred_columns": [
+            "id"
+          ],
+          "schema": "public",
+          "table": "devices"
+        },
+        {
+          "columns": [
+            "reviewed_by_id"
+          ],
+          "name": "fk_checkins_reviewer",
+          "options": {},
+          "referred_columns": [
+            "id"
+          ],
+          "schema": "public",
+          "table": "users"
+        }
+      ],
+      "indexes": [
+        {
+          "columns": [
+            "checked_in_at"
+          ],
+          "expressions": null,
+          "include": [],
+          "name": "ix_checkins_checked_in_at",
+          "options": {
+            "postgresql_include": []
+          },
+          "unique": false
+        },
+        {
+          "columns": [
+            "risk_score"
+          ],
+          "expressions": null,
+          "include": [],
+          "name": "ix_checkins_risk_score",
+          "options": {
+            "postgresql_include": []
+          },
+          "unique": false
+        },
+        {
+          "columns": [
+            "scheduled_deletion_at"
+          ],
+          "expressions": null,
+          "include": [],
+          "name": "ix_checkins_scheduled_deletion_at",
+          "options": {
+            "postgresql_include": []
+          },
+          "unique": false
+        },
+        {
+          "columns": [
+            "session_id"
+          ],
+          "expressions": null,
+          "include": [],
+          "name": "ix_checkins_session_id",
+          "options": {
+            "postgresql_include": []
+          },
+          "unique": false
+        },
+        {
+          "columns": [
+            "status",
+            "checked_in_at"
+          ],
+          "expressions": null,
+          "include": [],
+          "name": "ix_checkins_status_checked_in",
+          "options": {
+            "postgresql_include": []
+          },
+          "unique": false
+        },
+        {
+          "columns": [
+            "student_id"
+          ],
+          "expressions": null,
+          "include": [],
+          "name": "ix_checkins_student_id",
+          "options": {
+            "postgresql_include": []
+          },
+          "unique": false
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique_constraints": [
+        {
+          "columns": [
+            "student_id",
+            "session_id"
+          ],
+          "name": "uq_checkins_student_session"
+        }
+      ]
+    },
+    "course_tas": {
+      "checks": [],
+      "columns": {
+        "course_id": {
+          "default": null,
+          "nullable": false,
+          "type": "varchar(36)"
+        },
+        "ta_id": {
+          "default": null,
+          "nullable": false,
+          "type": "varchar(36)"
+        }
+      },
+      "foreign_keys": [
+        {
+          "columns": [
+            "course_id"
+          ],
+          "name": "course_tas_course_id_fkey",
+          "options": {},
+          "referred_columns": [
+            "id"
+          ],
+          "schema": "public",
+          "table": "courses"
+        },
+        {
+          "columns": [
+            "ta_id"
+          ],
+          "name": "course_tas_ta_id_fkey",
+          "options": {},
+          "referred_columns": [
+            "id"
+          ],
+          "schema": "public",
+          "table": "users"
+        }
+      ],
+      "indexes": [],
+      "primary_key": [
+        "course_id",
+        "ta_id"
+      ],
+      "unique_constraints": []
+    },
+    "courses": {
+      "checks": [
+        {
+          "expression": "venue_latitude >= '-90'::integer::double precision and venue_latitude <= 90::double precision",
+          "name": "ck_courses_latitude"
+        },
+        {
+          "expression": "venue_longitude >= '-180'::integer::double precision and venue_longitude <= 180::double precision",
+          "name": "ck_courses_longitude"
+        },
+        {
+          "expression": "geofence_radius_meters > 0::double precision",
+          "name": "ck_courses_radius"
+        },
+        {
+          "expression": "risk_threshold >= 0::double precision and risk_threshold <= 1::double precision",
+          "name": "ck_courses_risk"
+        }
+      ],
+      "columns": {
+        "code": {
+          "default": null,
+          "nullable": false,
+          "type": "varchar(20)"
+        },
+        "created_at": {
+          "default": null,
+          "nullable": false,
+          "type": "timestamp with time zone"
+        },
+        "geofence_radius_meters": {
+          "default": null,
+          "nullable": false,
+          "type": "double precision"
+        },
+        "id": {
+          "default": null,
+          "nullable": false,
+          "type": "varchar(36)"
+        },
+        "instructor_id": {
+          "default": null,
+          "nullable": true,
+          "type": "varchar(36)"
+        },
+        "is_active": {
+          "default": null,
+          "nullable": false,
+          "type": "boolean"
+        },
+        "name": {
+          "default": null,
+          "nullable": false,
+          "type": "varchar(255)"
+        },
+        "risk_threshold": {
+          "default": null,
+          "nullable": false,
+          "type": "double precision"
+        },
+        "semester": {
+          "default": null,
+          "nullable": false,
+          "type": "varchar(20)"
+        },
+        "updated_at": {
+          "default": null,
+          "nullable": false,
+          "type": "timestamp with time zone"
+        },
+        "venue_latitude": {
+          "default": null,
+          "nullable": true,
+          "type": "double precision"
+        },
+        "venue_longitude": {
+          "default": null,
+          "nullable": true,
+          "type": "double precision"
+        },
+        "venue_name": {
+          "default": null,
+          "nullable": true,
+          "type": "varchar(255)"
+        }
+      },
+      "foreign_keys": [
+        {
+          "columns": [
+            "instructor_id"
+          ],
+          "name": "courses_instructor_id_fkey",
+          "options": {},
+          "referred_columns": [
+            "id"
+          ],
+          "schema": "public",
+          "table": "users"
+        }
+      ],
+      "indexes": [
+        {
+          "columns": [
+            "instructor_id"
+          ],
+          "expressions": null,
+          "include": [],
+          "name": "ix_courses_instructor_id",
+          "options": {
+            "postgresql_include": []
+          },
+          "unique": false
+        },
+        {
+          "columns": [
+            "is_active"
+          ],
+          "expressions": null,
+          "include": [],
+          "name": "ix_courses_is_active",
+          "options": {
+            "postgresql_include": []
+          },
+          "unique": false
+        },
+        {
+          "columns": [
+            "semester"
+          ],
+          "expressions": null,
+          "include": [],
+          "name": "ix_courses_semester",
+          "options": {
+            "postgresql_include": []
+          },
+          "unique": false
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique_constraints": [
+        {
+          "columns": [
+            "code"
+          ],
+          "name": "courses_code_key"
+        }
+      ]
+    },
+    "devices": {
+      "checks": [
+        {
+          "expression": "trust_score::text = any (array['low'::character varying, 'medium'::character varying, 'high'::character varying])",
+          "name": "ck_devices_trust_score"
+        }
+      ],
+      "columns": {
+        "device_fingerprint": {
+          "default": null,
+          "nullable": false,
+          "type": "varchar(64)"
+        },
+        "device_name": {
+          "default": null,
+          "nullable": true,
+          "type": "varchar(255)"
+        },
+        "first_seen_at": {
+          "default": null,
+          "nullable": false,
+          "type": "timestamp with time zone"
+        },
+        "id": {
+          "default": null,
+          "nullable": false,
+          "type": "varchar(36)"
+        },
+        "is_active": {
+          "default": "true",
+          "nullable": false,
+          "type": "boolean"
+        },
+        "is_trusted": {
+          "default": "false",
+          "nullable": false,
+          "type": "boolean"
+        },
+        "last_seen_at": {
+          "default": null,
+          "nullable": false,
+          "type": "timestamp with time zone"
+        },
+        "platform": {
+          "default": null,
+          "nullable": true,
+          "type": "varchar(50)"
+        },
+        "public_key": {
+          "default": null,
+          "nullable": true,
+          "type": "text"
+        },
+        "total_checkins": {
+          "default": "0",
+          "nullable": false,
+          "type": "integer"
+        },
+        "trust_score": {
+          "default": "'low'::character varying",
+          "nullable": false,
+          "type": "varchar(20)"
+        },
+        "user_id": {
+          "default": null,
+          "nullable": false,
+          "type": "varchar(36)"
+        }
+      },
+      "foreign_keys": [
+        {
+          "columns": [
+            "user_id"
+          ],
+          "name": "devices_user_id_fkey",
+          "options": {},
+          "referred_columns": [
+            "id"
+          ],
+          "schema": "public",
+          "table": "users"
+        }
+      ],
+      "indexes": [
+        {
+          "columns": [
+            "is_active"
+          ],
+          "expressions": null,
+          "include": [],
+          "name": "ix_devices_is_active",
+          "options": {
+            "postgresql_include": []
+          },
+          "unique": false
+        },
+        {
+          "columns": [
+            "is_trusted"
+          ],
+          "expressions": null,
+          "include": [],
+          "name": "ix_devices_is_trusted",
+          "options": {
+            "postgresql_include": []
+          },
+          "unique": false
+        },
+        {
+          "columns": [
+            "user_id"
+          ],
+          "expressions": null,
+          "include": [],
+          "name": "ix_devices_user_id",
+          "options": {
+            "postgresql_include": []
+          },
+          "unique": false
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique_constraints": [
+        {
+          "columns": [
+            "device_fingerprint"
+          ],
+          "name": "uq_devices_fingerprint"
+        }
+      ]
+    },
+    "enrollments": {
+      "checks": [],
+      "columns": {
+        "course_id": {
+          "default": null,
+          "nullable": false,
+          "type": "varchar(36)"
+        },
+        "enrolled_at": {
+          "default": null,
+          "nullable": false,
+          "type": "timestamp with time zone"
+        },
+        "id": {
+          "default": null,
+          "nullable": false,
+          "type": "varchar(36)"
+        },
+        "is_active": {
+          "default": null,
+          "nullable": false,
+          "type": "boolean"
+        },
+        "student_id": {
+          "default": null,
+          "nullable": false,
+          "type": "varchar(36)"
+        }
+      },
+      "foreign_keys": [
+        {
+          "columns": [
+            "course_id"
+          ],
+          "name": "enrollments_course_id_fkey",
+          "options": {},
+          "referred_columns": [
+            "id"
+          ],
+          "schema": "public",
+          "table": "courses"
+        },
+        {
+          "columns": [
+            "student_id"
+          ],
+          "name": "enrollments_student_id_fkey",
+          "options": {},
+          "referred_columns": [
+            "id"
+          ],
+          "schema": "public",
+          "table": "users"
+        }
+      ],
+      "indexes": [
+        {
+          "columns": [
+            "course_id"
+          ],
+          "expressions": null,
+          "include": [],
+          "name": "ix_enrollments_course_id",
+          "options": {
+            "postgresql_include": []
+          },
+          "unique": false
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique_constraints": [
+        {
+          "columns": [
+            "student_id",
+            "course_id"
+          ],
+          "name": "uq_enrollments_student_course"
+        }
+      ]
+    },
+    "sessions": {
+      "checks": [
+        {
+          "expression": "venue_latitude >= '-90'::integer::double precision and venue_latitude <= 90::double precision",
+          "name": "ck_sessions_latitude"
+        },
+        {
+          "expression": "venue_longitude >= '-180'::integer::double precision and venue_longitude <= 180::double precision",
+          "name": "ck_sessions_longitude"
+        },
+        {
+          "expression": "geofence_radius_meters > 0::double precision",
+          "name": "ck_sessions_radius"
+        },
+        {
+          "expression": "risk_threshold >= 0::double precision and risk_threshold <= 1::double precision",
+          "name": "ck_sessions_risk"
+        },
+        {
+          "expression": "scheduled_end > scheduled_start",
+          "name": "ck_sessions_schedule"
+        },
+        {
+          "expression": "status::text = any (array['scheduled'::character varying, 'active'::character varying, 'closed'::character varying, 'cancelled'::character varying])",
+          "name": "ck_sessions_status"
+        },
+        {
+          "expression": "session_type::text = any (array['lecture'::character varying, 'tutorial'::character varying, 'lab'::character varying, 'exam'::character varying])",
+          "name": "ck_sessions_type"
+        },
+        {
+          "expression": "checkin_closes_at > checkin_opens_at",
+          "name": "ck_sessions_window"
+        }
+      ],
+      "columns": {
+        "checkin_closes_at": {
+          "default": null,
+          "nullable": false,
+          "type": "timestamp with time zone"
+        },
+        "checkin_opens_at": {
+          "default": null,
+          "nullable": false,
+          "type": "timestamp with time zone"
+        },
+        "course_id": {
+          "default": null,
+          "nullable": false,
+          "type": "varchar(36)"
+        },
+        "created_at": {
+          "default": null,
+          "nullable": false,
+          "type": "timestamp with time zone"
+        },
+        "geofence_radius_meters": {
+          "default": null,
+          "nullable": false,
+          "type": "double precision"
+        },
+        "id": {
+          "default": null,
+          "nullable": false,
+          "type": "varchar(36)"
+        },
+        "instructor_id": {
+          "default": null,
+          "nullable": false,
+          "type": "varchar(36)"
+        },
+        "name": {
+          "default": null,
+          "nullable": false,
+          "type": "varchar(255)"
+        },
+        "require_face_match": {
+          "default": null,
+          "nullable": false,
+          "type": "boolean"
+        },
+        "require_liveness_check": {
+          "default": null,
+          "nullable": false,
+          "type": "boolean"
+        },
+        "risk_threshold": {
+          "default": null,
+          "nullable": false,
+          "type": "double precision"
+        },
+        "scheduled_end": {
+          "default": null,
+          "nullable": false,
+          "type": "timestamp with time zone"
+        },
+        "scheduled_start": {
+          "default": null,
+          "nullable": false,
+          "type": "timestamp with time zone"
+        },
+        "session_type": {
+          "default": null,
+          "nullable": false,
+          "type": "varchar(50)"
+        },
+        "status": {
+          "default": null,
+          "nullable": false,
+          "type": "varchar(20)"
+        },
+        "venue_latitude": {
+          "default": null,
+          "nullable": false,
+          "type": "double precision"
+        },
+        "venue_longitude": {
+          "default": null,
+          "nullable": false,
+          "type": "double precision"
+        },
+        "venue_name": {
+          "default": null,
+          "nullable": true,
+          "type": "varchar(255)"
+        }
+      },
+      "foreign_keys": [
+        {
+          "columns": [
+            "course_id"
+          ],
+          "name": "sessions_course_id_fkey",
+          "options": {},
+          "referred_columns": [
+            "id"
+          ],
+          "schema": "public",
+          "table": "courses"
+        },
+        {
+          "columns": [
+            "instructor_id"
+          ],
+          "name": "sessions_instructor_id_fkey",
+          "options": {},
+          "referred_columns": [
+            "id"
+          ],
+          "schema": "public",
+          "table": "users"
+        }
+      ],
+      "indexes": [
+        {
+          "columns": [
+            "course_id"
+          ],
+          "expressions": null,
+          "include": [],
+          "name": "ix_sessions_course_id",
+          "options": {
+            "postgresql_include": []
+          },
+          "unique": false
+        },
+        {
+          "columns": [
+            "instructor_id"
+          ],
+          "expressions": null,
+          "include": [],
+          "name": "ix_sessions_instructor_id",
+          "options": {
+            "postgresql_include": []
+          },
+          "unique": false
+        },
+        {
+          "columns": [
+            "scheduled_start"
+          ],
+          "expressions": null,
+          "include": [],
+          "name": "ix_sessions_scheduled_start",
+          "options": {
+            "postgresql_include": []
+          },
+          "unique": false
+        },
+        {
+          "columns": [
+            "status"
+          ],
+          "expressions": null,
+          "include": [],
+          "name": "ix_sessions_status",
+          "options": {
+            "postgresql_include": []
+          },
+          "unique": false
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique_constraints": []
+    },
+    "users": {
+      "checks": [
+        {
+          "expression": "role::text = any (array['student'::character varying, 'ta'::character varying, 'instructor'::character varying, 'admin'::character varying])",
+          "name": "ck_users_role"
+        }
+      ],
+      "columns": {
+        "camera_consent": {
+          "default": "false",
+          "nullable": false,
+          "type": "boolean"
+        },
+        "created_at": {
+          "default": "current_timestamp",
+          "nullable": false,
+          "type": "timestamp with time zone"
+        },
+        "email": {
+          "default": null,
+          "nullable": false,
+          "type": "varchar(255)"
+        },
+        "face_embedding_hash": {
+          "default": null,
+          "nullable": true,
+          "type": "varchar(64)"
+        },
+        "face_enrolled": {
+          "default": "false",
+          "nullable": false,
+          "type": "boolean"
+        },
+        "failed_login_attempts": {
+          "default": "0",
+          "nullable": false,
+          "type": "integer"
+        },
+        "full_name": {
+          "default": null,
+          "nullable": false,
+          "type": "varchar(255)"
+        },
+        "geolocation_consent": {
+          "default": "false",
+          "nullable": false,
+          "type": "boolean"
+        },
+        "hashed_password": {
+          "default": null,
+          "nullable": false,
+          "type": "varchar(255)"
+        },
+        "id": {
+          "default": null,
+          "nullable": false,
+          "type": "varchar(36)"
+        },
+        "is_active": {
+          "default": "true",
+          "nullable": false,
+          "type": "boolean"
+        },
+        "last_login_at": {
+          "default": null,
+          "nullable": true,
+          "type": "timestamp with time zone"
+        },
+        "role": {
+          "default": "'student'::character varying",
+          "nullable": false,
+          "type": "varchar(20)"
+        },
+        "scheduled_deletion_at": {
+          "default": null,
+          "nullable": true,
+          "type": "timestamp with time zone"
+        },
+        "updated_at": {
+          "default": "current_timestamp",
+          "nullable": false,
+          "type": "timestamp with time zone"
+        }
+      },
+      "foreign_keys": [],
+      "indexes": [
+        {
+          "columns": [
+            "is_active"
+          ],
+          "expressions": null,
+          "include": [],
+          "name": "ix_users_is_active",
+          "options": {
+            "postgresql_include": []
+          },
+          "unique": false
+        },
+        {
+          "columns": [
+            "role"
+          ],
+          "expressions": null,
+          "include": [],
+          "name": "ix_users_role",
+          "options": {
+            "postgresql_include": []
+          },
+          "unique": false
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "unique_constraints": [
+        {
+          "columns": [
+            "email"
+          ],
+          "name": "users_email_key"
+        }
+      ]
+    }
+  }
+}

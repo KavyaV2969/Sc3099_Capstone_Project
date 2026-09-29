@@ -1,18 +1,22 @@
 """Database-backed registration, login, and refresh endpoints."""
 
 from datetime import datetime, timezone
+from hashlib import sha256
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.audit import write_audit_log
 from app.db import get_db
-from app.models import User
+from app.models import User, Enrollment, Device
+from app.services.enrollments import include_in_active_rosters
 from app.rate_limit import enforce_login_limit, enforce_registration_limit, enforce_user_api_limit
 from app.schemas import LoginRequest, LoginResponse, RefreshTokenRequest, TokenPairResponse, TokenType, UserRegister, UserResponse, UserRole
 from app.security import InvalidTokenError, create_access_token, create_refresh_token, decode_token, hash_password, verify_password
+from app.schemas.auth import ActivationRequest
+from app.schemas import as_utc
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
@@ -44,16 +48,12 @@ def register(
         role=payload.role.value,
     )
     database.add(user)
-    database.flush()
-    write_audit_log(
-        database,
-        request,
-        action="user_created",
-        user_id=user.id,
-        resource_type="user",
-        resource_id=user.id,
-    )
     try:
+        database.flush()
+        write_audit_log(
+            database, request, action="user_created", user_id=user.id,
+            resource_type="user", resource_id=user.id,
+        )
         database.commit()
     except IntegrityError as exc:
         database.rollback()
@@ -73,6 +73,9 @@ def login(
     # Serialize attempts for this account, including attempts from different IPs.
     user = database.scalar(select(User).where(User.email == payload.email).with_for_update())
     if user is not None and user.failed_login_attempts >= 10:
+        write_audit_log(database, request, action="login_failed", user_id=user.id,
+                        details={"email": payload.email, "reason": "account_blocked"}, success=False)
+        database.commit()
         raise HTTPException(status_code=429, detail="account is blocked; contact an administrator")
     if user is None or not verify_password(payload.password, user.hashed_password):
         if user is not None:
@@ -96,7 +99,7 @@ def login(
             request,
             action="login_failed",
             user_id=user.id,
-            details={"reason": "account_inactive"},
+            details={"email": payload.email, "reason": "account_inactive"},
             success=False,
         )
         database.commit()
@@ -104,11 +107,41 @@ def login(
 
     user.failed_login_attempts = 0
     user.last_login_at = datetime.now(timezone.utc)
-    write_audit_log(database, request, action="login_success", user_id=user.id)
+    device_id = database.scalar(select(Device.id).where(Device.user_id == user.id,
+        Device.device_fingerprint == payload.device_fingerprint, Device.is_active.is_(True))) if payload.device_fingerprint else None
+    write_audit_log(database, request, action="login_success", user_id=user.id,
+                    device_id=device_id, details={"device_id": device_id})
     database.commit()
     database.refresh(user)
     tokens = _token_pair(user)
     return LoginResponse(**tokens.model_dump(), user=user)
+
+
+@router.post("/activate", response_model=UserResponse)
+def activate(payload: ActivationRequest, request: Request, response: Response,
+             database: Session = Depends(get_db)):
+    enforce_registration_limit(request)
+    user = database.scalar(select(User).where(
+        User.activation_token_hash == sha256(payload.token.encode()).hexdigest()
+    ).with_for_update())
+    if (user is None or user.activation_expires_at is None
+        or as_utc(user.activation_expires_at) <= datetime.now(timezone.utc)
+        or user.scheduled_deletion_at is not None or user.role != "student"):
+        raise HTTPException(status_code=400, detail="activation link is invalid or expired")
+    user.hashed_password = hash_password(payload.password)
+    if payload.full_name is not None:
+        user.full_name = payload.full_name
+    user.is_active, user.failed_login_attempts = True, 0
+    user.activation_token_hash = user.activation_expires_at = None
+    for course_id in database.scalars(select(Enrollment.course_id).where(
+        Enrollment.student_id == user.id, Enrollment.is_active.is_(True)).order_by(Enrollment.course_id)):
+        include_in_active_rosters(database, user.id, course_id)
+    write_audit_log(database, request, action="user_activated", user_id=user.id,
+                    resource_type="user", resource_id=user.id, details={"method": "activation_link"})
+    database.commit()
+    database.refresh(user)
+    response.headers["Cache-Control"] = "no-store"
+    return user
 
 
 @router.post("/refresh", response_model=TokenPairResponse)
@@ -117,7 +150,7 @@ def refresh(
     request: Request,
     database: Session = Depends(get_db),
 ) -> TokenPairResponse:
-    """Validate a refresh token and rotate both JWTs."""
+    """Validate a refresh token and issue a new pair; the old token is not revoked."""
     try:
         token = decode_token(payload.refresh_token, TokenType.REFRESH)
     except InvalidTokenError as exc:

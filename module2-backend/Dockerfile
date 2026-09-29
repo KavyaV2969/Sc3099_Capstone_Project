@@ -8,6 +8,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app ./app
 COPY alembic ./alembic
 COPY alembic.ini ./alembic.ini
+COPY alembic_legacy ./alembic_legacy
+COPY scripts ./scripts
 
 EXPOSE 8000
 
@@ -18,4 +20,5 @@ COPY tests ./tests
 CMD ["python", "-m", "pytest", "-q"]
 
 FROM runtime AS production
-CMD ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+HEALTHCHECK --interval=15s --timeout=10s --start-period=45s --retries=3 CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=8).read()"
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]

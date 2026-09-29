@@ -1,0 +1,475 @@
+{
+  "schema": "healthy",
+  "revision": "20260928_0006",
+  "original_values_and_keys_preserved": true,
+  "counts": {
+    "audit_logs": 1238,
+    "checkins": 9,
+    "course_tas": 0,
+    "courses": 99,
+    "devices": 4,
+    "enrollments": 41,
+    "sessions": 77,
+    "users": 403
+  },
+  "liveness_sessions_for_owner_review": [
+    {
+      "id": "0406bc34-8ff5-4ef4-9c18-b3b11349ca1b",
+      "instructor_id": "cb45a7a8-a815-48a7-a9db-5809c93e5924",
+      "status": "active",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "066dd26f-aaf8-482e-9fe7-946fbba4bb02",
+      "instructor_id": "7f95d4be-9284-429f-a055-c7c11d06fa03",
+      "status": "active",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "09102630-482b-4107-800c-649211337413",
+      "instructor_id": "f14e42c1-4238-4c94-b350-8ce82fd643e1",
+      "status": "active",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "11b0bbab-a5fc-44e5-aa3d-96dd3961b5b3",
+      "instructor_id": "8d4da105-ca4d-432b-ae0f-0b0044fe811b",
+      "status": "scheduled",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "188c6365-80a9-4959-acd9-4109f3a5a704",
+      "instructor_id": "5b45ce0a-9a66-4a14-a00f-9b9cadf7f4d3",
+      "status": "scheduled",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "1cc1addd-971b-4aba-80b1-e7d9f199dd4b",
+      "instructor_id": "2808c5bd-9462-4055-b4d4-01e81f399fcb",
+      "status": "active",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "1f9c07aa-49a8-4ab2-94c0-9014817f6aa0",
+      "instructor_id": "9746bbea-2cc8-41ee-ac90-b3e5d28b95d4",
+      "status": "scheduled",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "2283886c-b231-4471-b4d0-d657c459b237",
+      "instructor_id": "345ee258-1402-4c3c-9eae-c24bac4bb829",
+      "status": "scheduled",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "244c7257-c502-46fe-b89f-1dcb3661bb90",
+      "instructor_id": "d3dcdeb8-4700-4bd5-99c3-b91189c85cfc",
+      "status": "scheduled",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "262178a1-96b2-4d16-9555-568188a790cf",
+      "instructor_id": "b57bc52b-f70d-4bdc-9945-dc9a17e59049",
+      "status": "scheduled",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "2e3830c1-a11d-4644-873b-92ac95ee0aa2",
+      "instructor_id": "5eecbe7b-7189-45d8-921d-028bb8c651b2",
+      "status": "active",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "2eb8f44f-5197-4a05-a2d3-b42643b2099e",
+      "instructor_id": "54acb4b4-0c7c-4fe9-8e58-bcb0204f92ea",
+      "status": "scheduled",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "315cc3c9-c763-4d69-9f98-8aba18135070",
+      "instructor_id": "6a94206e-2346-4bd4-8721-0795c184b379",
+      "status": "active",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "3708044a-ac4c-4494-a7a3-613a86da000c",
+      "instructor_id": "956e80e9-2a66-444f-b463-40da643acc59",
+      "status": "active",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "39be6afd-c046-4999-8532-48a8d8a35f69",
+      "instructor_id": "73d5659b-949e-4445-a0ec-2170b854ed7e",
+      "status": "scheduled",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "4080dded-73df-47c9-8c38-6c539fd8d98e",
+      "instructor_id": "2fe3c1db-5486-4704-aa63-cd665d9d73f1",
+      "status": "scheduled",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "4bc5156c-8d27-4fbe-a243-da07458c3d96",
+      "instructor_id": "a66b6878-c5cc-4a21-a548-1792148e1d37",
+      "status": "scheduled",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "4c5e2292-b258-4a0b-9154-39d0033a44a5",
+      "instructor_id": "d4f80b70-ccb1-4146-8e2e-a07eacdcd4ef",
+      "status": "active",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "532fec4a-a2d7-4fd8-bbde-8a8bfe234658",
+      "instructor_id": "1f1e0415-cb15-4e70-8243-f594085534a6",
+      "status": "active",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "57943b3c-821a-4883-869a-5208cdfd170e",
+      "instructor_id": "31e712f1-669d-41a0-b855-2fbf41a4d3c0",
+      "status": "active",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "59825cd7-c535-4e41-8831-56cc55df9686",
+      "instructor_id": "1cda3c53-778f-4c8b-9171-d533e17f95c4",
+      "status": "active",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "5a6d23c6-74da-40fa-bb8e-f6c4c787c140",
+      "instructor_id": "0ab8cd71-959a-4257-8da5-2528a74a4396",
+      "status": "active",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "5dfae474-2685-4b95-8975-88ee0aa84414",
+      "instructor_id": "a3a7ac28-9922-430f-9197-dc7d11bbc7c5",
+      "status": "active",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "604c98f7-7d25-4b50-b127-f5c7374835e1",
+      "instructor_id": "d7db2726-eebe-480b-bf3e-0ad03ed6517d",
+      "status": "scheduled",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "60cc43f7-fc6f-438f-9914-90f26453ed47",
+      "instructor_id": "5e148eda-062f-4d41-9ce2-a2b2cc418acc",
+      "status": "scheduled",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "6294920a-bc53-44ef-8071-74da60abf710",
+      "instructor_id": "f3c541ca-5398-413f-a016-d3211a94d49e",
+      "status": "scheduled",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "6356cc6b-747b-4ed6-939f-b7b02b0536fd",
+      "instructor_id": "bf5c6456-d207-4e44-87ba-fa667898e464",
+      "status": "active",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "713e0298-3ffd-442b-8dbe-4a7f9a8fa943",
+      "instructor_id": "d9668247-2711-47ec-9a45-ef2d5f8e56a6",
+      "status": "active",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "72817088-b9e7-4940-b4ed-8d9e527f37be",
+      "instructor_id": "b81c52c5-3bef-4182-b969-a4017c18dc59",
+      "status": "active",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "74a5ea3b-7ac9-4293-89fb-6731c9fa1cad",
+      "instructor_id": "0572bd40-2780-460f-934c-31fb156bf16f",
+      "status": "scheduled",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "7aaff46a-e036-4b9f-b30d-6531f7f9c733",
+      "instructor_id": "ee153bee-2cb7-457a-b846-1cba0b597de1",
+      "status": "active",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "7ffe0421-520a-419c-8bc1-6adabd0f47ae",
+      "instructor_id": "804dd9cf-d6f3-47db-bdd3-3ba73ace58c6",
+      "status": "active",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "81d60bf9-08c4-48bf-93de-1e80b21913f2",
+      "instructor_id": "358870bb-211d-4ec1-9a58-8ab306c39d9e",
+      "status": "active",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "84642fc0-b2d3-4dae-b1d6-3d20802f3442",
+      "instructor_id": "39f6f725-3fbf-4797-a92f-291d21ede7a6",
+      "status": "active",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "865c8304-f787-44de-8303-3be6f0dd2202",
+      "instructor_id": "470bf054-2a3f-4668-b55f-0628f4a24f94",
+      "status": "scheduled",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "8ad8fc37-17bd-41a6-ab36-c06d975334c5",
+      "instructor_id": "054782ba-6f69-48a6-b7ae-305aa1dc66fd",
+      "status": "scheduled",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "92edb67d-08c2-4349-9a5c-16e266c23901",
+      "instructor_id": "7fc9e125-c2da-4526-a90c-3054807c6d02",
+      "status": "active",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "96d1c385-ebd8-4d16-b0c3-5836ccf90015",
+      "instructor_id": "61831773-b820-4171-8fd5-4c61fccc32e6",
+      "status": "active",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "9e6f8ea1-96a4-4b58-8351-18cc2bbfb9fe",
+      "instructor_id": "54bf4c0d-0385-400f-8c50-d559b931d7d5",
+      "status": "scheduled",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "a452a3cc-5229-4cd2-b6e0-5d710573a0ef",
+      "instructor_id": "f5d0c862-55d6-49b8-9f14-a0668228e3d1",
+      "status": "active",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "a696d70b-cc2c-46ec-a77c-f78ed18958ef",
+      "instructor_id": "4dbc2abc-590a-43dc-a9a5-d1f5d1baf4d5",
+      "status": "active",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "a74f359f-1bd6-4934-a006-831ef0868228",
+      "instructor_id": "75737997-86aa-4920-8877-a2df97b5c614",
+      "status": "active",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "a92adcc6-b762-420a-8890-73d7148bacfb",
+      "instructor_id": "7209d201-5773-400d-9d8f-442d664c72af",
+      "status": "active",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "af5cb0c2-3218-497b-9f3e-eb228b6272f5",
+      "instructor_id": "8518ff34-9523-45df-ade2-948ad32356f1",
+      "status": "scheduled",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "af73129f-1cc7-406e-bcea-67c212f9924c",
+      "instructor_id": "55ab0a20-66fc-4605-9d86-e1259e9ebd30",
+      "status": "active",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "b744a5ff-4584-465d-97b6-823c4f7b73b2",
+      "instructor_id": "a51c4089-5774-4b4e-9ee0-5085037d09bb",
+      "status": "scheduled",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "ba7280ef-2e13-4f2f-bb97-d648b31f3242",
+      "instructor_id": "f6d3c008-ad5a-41ab-883b-b7d9d505ee64",
+      "status": "active",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "c10f7c3e-0627-45d7-877b-4004e91c2e9e",
+      "instructor_id": "249d55c3-7f16-49ca-bbc8-f6d1f067acc6",
+      "status": "active",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "c41d5a14-9197-492f-8126-2d2f84f048cf",
+      "instructor_id": "ac1ca274-58c3-49e8-8399-aad250352be8",
+      "status": "active",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "cb7ad5b3-7c29-4a34-9e6b-9717004fd348",
+      "instructor_id": "f1699c0c-53ec-41f6-bec9-c3d21d3aa75c",
+      "status": "active",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "ccf4792e-97ad-481b-8d2e-0c7683872755",
+      "instructor_id": "5b29fd1a-bb2d-4f7c-a8ae-1134ea1fd0a2",
+      "status": "active",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "d0ea2e66-7d93-4d93-8660-e686072374f8",
+      "instructor_id": "0814d882-e5a5-46f8-a10c-395e3d05c5f2",
+      "status": "active",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "d39012e5-3499-4d2b-9dc4-1900f5dff3fa",
+      "instructor_id": "df340a12-103c-4c2c-a0c5-470525889a2b",
+      "status": "scheduled",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "d3f20b90-5180-46de-a662-440823dd5e1c",
+      "instructor_id": "55dcedd9-b3e3-44c5-adb8-bab45670b9e0",
+      "status": "active",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "d55f0ecb-d43c-4156-a4f6-9ad607761b82",
+      "instructor_id": "6ca88739-e204-498a-8481-b353664b9944",
+      "status": "active",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "d9292cf2-8022-465a-9e45-dd78050ddfbd",
+      "instructor_id": "cf442e65-2da9-4301-b4d8-f34d723acdf7",
+      "status": "active",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "e23809f4-dc1c-4453-9e93-67254a3c4ef5",
+      "instructor_id": "2953656f-c838-43f6-97cc-d0c12c7469f6",
+      "status": "scheduled",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "e2eb3932-e83c-4fea-b612-24e2eec6eb02",
+      "instructor_id": "a9761e56-75bf-4723-932a-dacfa8049fd9",
+      "status": "active",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "e9f04a29-a706-4af3-878b-8a87a307f6f8",
+      "instructor_id": "be28aa2b-de41-4ce3-9afa-9e99521e4f82",
+      "status": "scheduled",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "f65c6fb9-ae21-4499-8e78-900771df0b9b",
+      "instructor_id": "3a41ee4b-47b6-47b5-8e52-cfb0ce31371d",
+      "status": "active",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "f9bb6520-20c0-44c6-863d-ab3eb89799f0",
+      "instructor_id": "90f6aa41-ca51-4535-96bd-91644225080c",
+      "status": "scheduled",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "fbb6fcdd-23cd-4647-ad9f-0dd1da444d79",
+      "instructor_id": "0dd642d8-af4e-4861-b816-6f5b1b5ea5b1",
+      "status": "active",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "fd4a966b-da1d-413c-ab0a-b0bf38640808",
+      "instructor_id": "7ea15a4a-1d9f-4f12-8d50-c25f12669c5c",
+      "status": "scheduled",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "fd6d5c09-b139-4208-917c-c9fc9fbaed10",
+      "instructor_id": "146d820b-f6b3-48d0-a3bc-60d41c53384a",
+      "status": "scheduled",
+      "require_liveness_check": true,
+      "require_face_match": false
+    },
+    {
+      "id": "ffc20059-d94a-4183-ad41-05cf292b7e27",
+      "instructor_id": "c38e85c5-0003-4a78-bfd8-973bf41b270d",
+      "status": "active",
+      "require_liveness_check": true,
+      "require_face_match": false
+    }
+  ],
+  "face_service_health": "unavailable",
+  "real_module3_interoperability": "not verified",
+  "existing_database_writes": false
+}

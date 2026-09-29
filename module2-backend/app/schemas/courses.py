@@ -1,12 +1,13 @@
 """Course and enrollment schemas."""
 
 from datetime import datetime
+from app.config import default_risk_threshold
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, UUID4, field_validator, model_validator
 
-from .common import CourseCode, Latitude, Longitude, Radius, RiskScore, ShortName
+from .common import MutationModel, bounded_image, CourseCode, Latitude, Longitude, Radius, RiskScore, ShortName
 
 
-class CourseCreate(BaseModel):
+class CourseCreate(MutationModel):
     code: CourseCode
     name: ShortName
     semester: CourseCode
@@ -15,10 +16,10 @@ class CourseCreate(BaseModel):
     venue_latitude: Latitude | None = None
     venue_longitude: Longitude | None = None
     geofence_radius_meters: Radius = 100.0
-    risk_threshold: RiskScore = 0.5
+    risk_threshold: RiskScore = Field(default_factory=default_risk_threshold)
 
 
-class CourseUpdate(BaseModel):
+class CourseUpdate(MutationModel):
     code: CourseCode | None = None
     name: ShortName | None = None
     semester: CourseCode | None = None
@@ -57,7 +58,7 @@ class CourseListResponse(BaseModel):
     offset: int
 
 
-class EnrollmentCreate(BaseModel):
+class EnrollmentCreate(MutationModel):
     student_id: UUID4
     course_id: UUID4
 
@@ -90,9 +91,11 @@ class CourseEnrollmentsResponse(BaseModel):
     course_code: str
     total_enrolled: int
     students: list[EnrolledStudentResponse]
+    limit: int = 100
+    offset: int = 0
 
 
-class BulkEnrollmentCreate(BaseModel):
+class BulkEnrollmentCreate(MutationModel):
     course_id: UUID4
     student_emails: list[EmailStr] = Field(min_length=1, max_length=1000)
     create_accounts: bool = False
@@ -106,6 +109,8 @@ class BulkEnrollmentCreate(BaseModel):
 class BulkEnrollmentDetail(BaseModel):
     email: EmailStr
     status: str
+    activation_url: str | None = None
+    activation_expires_at: datetime | None = None
 
 
 class BulkEnrollmentResponse(BaseModel):

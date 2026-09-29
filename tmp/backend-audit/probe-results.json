@@ -1,0 +1,108 @@
+[
+  {
+    "case": "required_liveness_omitted_threshold_zero_accuracy_10000",
+    "http": 201,
+    "status": "approved",
+    "risk_score": 0.0,
+    "liveness_passed": null,
+    "risk_factors": []
+  },
+  {
+    "case": "geofence_150m_known_device_False",
+    "http": 201,
+    "status": "flagged",
+    "risk_score": 0.5
+  },
+  {
+    "case": "geofence_150m_known_device_True",
+    "http": 201,
+    "status": "approved",
+    "risk_score": 0.25
+  },
+  {
+    "case": "required_face_and_liveness_service_returns_empty_object",
+    "http": 201,
+    "status": "approved",
+    "liveness_passed": null,
+    "face_match_passed": null
+  },
+  {
+    "case": "malformed_face_service_schema",
+    "exception": "ValidationError"
+  },
+  {
+    "case": "low_quality_face_enrollment",
+    "http": 200,
+    "face_enrolled": true,
+    "quality": 0.1
+  },
+  {
+    "case": "owner_reactivates_admin_revoked_device_and_removes_key",
+    "http": 201,
+    "active": true,
+    "trusted": true,
+    "public_key": null,
+    "initial_audit_resource_id": null,
+    "initial_audit_device_id": null
+  },
+  {
+    "case": "session_owner_unassigned_course_relationship",
+    "roster": 200,
+    "user_detail": 403,
+    "student_statistics": 403
+  },
+  {
+    "case": "course_permissions_have_different_scope",
+    "other_session_detail": 200,
+    "other_session_checkins": 200,
+    "own_session_list_count": 1
+  },
+  {
+    "case": "student_stats_include_unrelated_course",
+    "http": 200,
+    "course_codes": [
+      "OTHER",
+      "SC3099"
+    ]
+  },
+  {
+    "case": "admin_enrollment_inactive_course",
+    "http": 201
+  },
+  {
+    "case": "admin_rescheduled_session_with_checkin_then_delete",
+    "exception": "IntegrityError"
+  },
+  {
+    "case": "bulk_user_integrity_error_handler",
+    "exception": "NameError",
+    "message": "name 'IntegrityError' is not defined"
+  },
+  {
+    "case": "cors_exposed_headers",
+    "http": 401,
+    "exposed": null
+  },
+  {
+    "case": "token_pair_generated_same_second",
+    "tokens_identical": true
+  },
+  {
+    "case": "state_change_during_biometrics_close_session",
+    "http": 201,
+    "status": "approved",
+    "face_match_passed": null
+  },
+  {
+    "case": "state_change_during_biometrics_deactivate_user",
+    "http": 201,
+    "status": "approved",
+    "face_match_passed": null
+  },
+  {
+    "case": "state_change_during_biometrics_enable_face_match",
+    "http": 201,
+    "status": "approved",
+    "face_match_passed": null
+  }
+]

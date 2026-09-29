@@ -13,13 +13,13 @@ PostgreSQL database with 8 main tables for users, courses, sessions, check-ins, 
 ## Entity Relationship Diagram
 
 ```
-Users ─┬─< Enrollments >── Courses
-       │
-       ├─< Devices
-       │
-       ├─< CheckIns >── Sessions ──< Courses
-       │                    │
-       └─< AuditLogs        └─< RiskSignals
+Users â”€â”¬â”€< Enrollments >â”€â”€ Courses
+       â”‚
+       â”œâ”€< Devices
+       â”‚
+       â”œâ”€< CheckIns >â”€â”€ Sessions â”€â”€< Courses
+       â”‚                    â”‚
+       â””â”€< AuditLogs        â””â”€< RiskSignals
 ```
 
 ---
@@ -140,6 +140,14 @@ Attendance sessions (lectures, tutorials, etc.).
 ### devices
 
 Registered user devices.
+
+F00 legacy transition: two existing devices have no public key. Preserve their rows
+and NULL values; new registrations and re-registrations must supply a nonblank
+public key. Storage remains nullable until their owners supply real keys and a
+separate verified migration enforces NOT NULL. Do not invent keys or remove devices
+to enforce this requirement. Other implemented device widths, uniqueness and
+nullability follow the table below. Additional attestation/key-rotation fields
+remain feature work outside the F00 schema reconciliation.
 
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
@@ -306,3 +314,19 @@ Validate schema with public tests:
 ```bash
 pytest tests/public/test_privacy_basic.py -v
 ```
+# Implemented Module 2 schema â€” 29 September 2026
+
+This document retains the recommended design below. The implemented contract is
+the eight existing application tables plus forward migrations `20260929_0007`
+and `20260929_0008`; see [completion contract](../BACKEND-COMPLETION.md).
+`Checkin.risk_factors` and immutable outcome-audit contributions provide risk
+signals; consumers must not expect a duplicate `risk_signals` table.
+`course_tas` provides administrative course assignments. Session venue settings
+are materialized rather than live nullable overrides. Optional descriptive,
+attestation and QR columns are intentionally absent.
+New storage consists only of activation digest/expiry, device revocation time,
+and a retained JSON-in-TEXT session roster. A null roster means historical
+eligibility is unavailable, never an empty class. Audit mutation triggers and
+counter/activation/revocation constraints are part of the frozen head contract.
+Historical recovery still verifies `20260928_0006` before the normal forward
+upgrade to `20260929_0008`; no historical migration/provenance is rewritten.

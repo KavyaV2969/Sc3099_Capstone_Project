@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Annotated
 
-from pydantic import BaseModel, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 
 class UserRole(str, Enum):
@@ -57,6 +57,19 @@ RiskScore = Annotated[float, Field(ge=0, le=1, allow_inf_nan=False)]
 class Pagination(BaseModel):
     limit: int = Field(default=50, ge=1, le=100)
     offset: int = Field(default=0, ge=0)
+
+
+class MutationModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+def bounded_image(value: str | None) -> str | None:
+    if value is not None:
+        encoded = value.split(",", 1)[1] if value.startswith("data:") and "," in value else value
+        # Valid base64's decoded size, without duplicating Module 3 image/pixel decoding.
+        if len(encoded.rstrip("=")) * 3 // 4 > 10 * 1024 * 1024:
+            raise ValueError("decoded image exceeds 10 MiB")
+    return value
 
 
 def as_utc(value: datetime) -> datetime:

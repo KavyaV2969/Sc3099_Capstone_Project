@@ -191,88 +191,40 @@ try {
 
 ## Module 2: Backend → Module 3: Face Recognition
 
-### Internal Service Call
+### Validated internal service calls
 
-The Backend API calls the Face Recognition service internally (no authentication required between services).
-
-```python
-import httpx
-from typing import Optional
-
-FACE_SERVICE_URL = os.getenv("FACE_SERVICE_URL", "http://localhost:8001")
-
-async def check_liveness(image_base64: str, challenge_type: str = "blink") -> dict:
-    """Call face recognition service for liveness check."""
-    async with httpx.AsyncClient(timeout=5.0) as client:
-        try:
-            response = await client.post(
-                f"{FACE_SERVICE_URL}/liveness/check",
-                json={
-                    "challenge_response": image_base64,
-                    "challenge_type": challenge_type
-                }
-            )
-            response.raise_for_status()
-            return response.json()
-        except httpx.TimeoutException:
-            # Service timeout - proceed without liveness
-            return {"liveness_passed": None, "liveness_score": 0.0}
-        except httpx.HTTPError as e:
-            # Log error and proceed without liveness
-            logger.warning(f"Face service error: {e}")
-            return {"liveness_passed": None, "liveness_score": 0.0}
-```
-
-### Integration in Check-in Endpoint
+Use the backend's endpoint-specific client; do not substitute null results after
+errors. The client maps timeout, transport, JSON and response-contract failures to
+HTTP 503, and service HTTP 400/422 to HTTP 400. Liveness uses the passive challenge.
 
 ```python
-@router.post("/checkins/")
-async def create_checkin(
-    checkin_data: CheckinCreate,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    # 1. Validate session and enrollment
-    session = get_session(db, checkin_data.session_id)
-    if not session or session.status != "active":
-        raise HTTPException(400, "Invalid or inactive session")
+from app.face_service import check_liveness, verify_face
 
-    # 2. Check for duplicate check-in
-    existing = get_checkin(db, session.id, current_user.id)
-    if existing:
-        raise HTTPException(400, "Already checked in")
-
-    # 3. Call face recognition if image provided
-    liveness_result = {"liveness_passed": None, "liveness_score": 0.0}
-    if checkin_data.liveness_challenge_response:
-        liveness_result = await check_liveness(
-            checkin_data.liveness_challenge_response
-        )
-
-    # 4. Calculate geofence distance
-    distance = calculate_haversine_distance(
-        checkin_data.latitude, checkin_data.longitude,
-        session.venue_latitude, session.venue_longitude
-    )
-
-    # 5. Compute risk score
-    risk_score = compute_risk_score(
-        liveness_score=liveness_result.get("liveness_score", 0.0),
-        distance_meters=distance,
-        device_trusted=device.is_trusted if device else False
-    )
-
-    # 6. Determine status based on risk
-    status = "approved" if risk_score < session.risk_threshold else "flagged"
-
-    # 7. Create check-in record
-    checkin = create_checkin_record(db, checkin_data, current_user, status, risk_score)
-
-    # 8. Create audit log
-    create_audit_log(db, "checkin_attempted", current_user.id, checkin.id)
-
-    return checkin
+# Called only for enabled requirements, using immutable policy values.
+live = await check_liveness(image_base64)  # complete LivenessResult or error
+face = await verify_face(reference_template_hash, image_base64)
 ```
+
+### Check-in integration and retry behavior
+
+1. Read current session requirements and obtain required consents/enrollment.
+2. Supply a nonblank image if either verification flag is true. When both are
+   false, the backend makes no biometric calls and records null biometric fields.
+3. Backend persists an attempt and releases the transaction before remote calls.
+4. After calls, it refreshes and locks eligibility in the order user, course,
+   session, enrollment, device. Changed verification flags or reference hash return
+   HTTP 409; reload requirements and submit a new request. HTTP 400/503 creates no
+   attendance record; correct the image or restore service availability before retry.
+5. All submissions use the backend's local weighted scorer. Valid failed biometrics,
+   distance greater than twice the radius, or risk >=0.70 produce a stored rejected
+   check-in (HTTP 201). Otherwise risk >= session threshold flags for review; lower
+   risk approves. No alternate GPS-only scorer is selected for unknown devices.
+6. Attendance, device counters and outcome audit commit together. Never retry a
+   persisted rejected check-in as though it were a transient dependency failure.
+
+Liveness is a bonus capability. Disable its session requirement explicitly when
+unavailable; a required check must never be silently skipped. Network detection and
+cryptographic device proof remain separate work. Image data stays transient.
 
 ---
 
@@ -491,3 +443,14 @@ async def check_all_services():
                 results[name] = "unreachable"
     return results
 ```
+# Current backend integration — 29 September 2026
+
+Use the [completion contract](../BACKEND-COMPLETION.md) for current requests,
+signatures, reporting semantics, deployment identities and release evidence.
+The frontend build-time base is `http://localhost:8000/api/v1`.
+`/metrics` supplies `http_request_duration_seconds`, `checkin_attempts_total`
+and `checkin_success_total`; success means approved attendance at submission.
+Request IDs and validated trace-context propagation are implemented. Full OTLP
+tracing is deferred; an unused OTLP environment variable is not instrumentation.
+Backend `/health` checks database/schema/Redis, not biometric capabilities.
+A working external face service is still required to close real integration.

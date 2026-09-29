@@ -2,11 +2,11 @@
 
 from collections.abc import Generator
 
-from sqlalchemy import create_engine, text
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import get_settings
+from app.schema_contract import inspect_readiness
 
 settings = get_settings()
 engine = create_engine(
@@ -14,6 +14,7 @@ engine = create_engine(
     pool_pre_ping=True,
     pool_size=10,
     max_overflow=20,
+    pool_timeout=5,
     connect_args={"connect_timeout": 10} if settings.database_url.startswith("postgresql") else {},
 )
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
@@ -32,10 +33,9 @@ def get_db() -> Generator[Session, None, None]:
 
 
 def database_is_healthy() -> bool:
-    """Return whether PostgreSQL accepts a simple query."""
-    try:
-        with engine.connect() as connection:
-            connection.execute(text("SELECT 1"))
-        return True
-    except SQLAlchemyError:
-        return False
+    """Require connectivity and the exact supported PostgreSQL schema."""
+    return database_readiness().healthy
+
+
+def database_readiness():
+    return inspect_readiness(engine)

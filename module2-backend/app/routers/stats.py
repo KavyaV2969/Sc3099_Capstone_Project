@@ -9,89 +9,63 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.dependencies import require_roles
-from app.models import Checkin, Course, Enrollment, Session as AttendanceSession, User
+from app.models import Checkin, Course, Enrollment, Session as AttendanceSession, User, utc_now
+from app.services.reporting import attendance, business_day, load_report, rate, session_filters, MAX_CHECKINS
 from app.schemas import (CourseStatistics, OverviewStatistics, SessionStatistics,
                          StudentStatistics, UserRole, as_utc)
-from app.services.access import get_course, get_session, instructor_has_student_relationship, require_course_access, require_session_access
+from app.services.access import accessible_course_ids, get_course, get_session, instructor_has_student_relationship, require_course_access, require_session_access
 
 router = APIRouter(prefix="/stats", tags=["statistics"])
 
 
-def _rate(numerator: int | float, denominator: int | float) -> float:
-    return round(float(numerator) / float(denominator), 4) if denominator else 0.0
+def _group(sessions, checkins):
+    grouped = {session.id: [] for session in sessions}
+    for checkin in checkins:
+        grouped[checkin.session_id].append(checkin)
+    return grouped
 
 
 @router.get("/overview", response_model=OverviewStatistics)
-def overview(
-    course_id: UUID4 | None = None, days: int = Query(default=7, ge=1, le=365),
-    database: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.INSTRUCTOR, UserRole.ADMIN)),
-):
-    now = datetime.now(timezone.utc)
-    today = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    week = today - timedelta(days=6)
-    session_filters, checkin_filters = [], []
+def overview(course_id: UUID4 | None = None, days: int = Query(default=7, ge=1, le=365),
+             database: Session = Depends(get_db),
+             user: User = Depends(require_roles(UserRole.INSTRUCTOR, UserRole.ADMIN))):
+    ids = accessible_course_ids(user)
     if course_id:
         course = get_course(database, str(course_id))
         require_course_access(database, course, user, allow_ta=False)
-        session_filters.append(AttendanceSession.course_id == course.id)
-        checkin_filters.append(AttendanceSession.course_id == course.id)
-    elif user.role == "instructor":
-        session_filters.append((AttendanceSession.instructor_id == user.id) | (Course.instructor_id == user.id))
-        checkin_filters.append((AttendanceSession.instructor_id == user.id) | (Course.instructor_id == user.id))
-    session_base = select(AttendanceSession).join(Course, Course.id == AttendanceSession.course_id).where(*session_filters).subquery()
-    checkin_base = (select(Checkin).join(AttendanceSession, AttendanceSession.id == Checkin.session_id)
-                    .join(Course, Course.id == AttendanceSession.course_id).where(*checkin_filters).subquery())
-    total_sessions = database.scalar(select(func.count()).select_from(session_base)) or 0
-    active_sessions = database.scalar(select(func.count()).select_from(session_base).where(session_base.c.status == "active")) or 0
-    total_today = database.scalar(select(func.count()).select_from(checkin_base).where(checkin_base.c.checked_in_at >= today)) or 0
-    total_week = database.scalar(select(func.count()).select_from(checkin_base).where(checkin_base.c.checked_in_at >= week)) or 0
-    aggregates = database.execute(select(
-        func.count(checkin_base.c.id),
-        func.sum(case((checkin_base.c.status == "approved", 1), else_=0)),
-        func.sum(case((checkin_base.c.status.in_(("flagged", "appealed")), 1), else_=0)),
-        func.avg(checkin_base.c.risk_score),
-    )).one()
-    sqlite = database.get_bind().dialect.name == "sqlite"
-    checkin_day = func.date(checkin_base.c.checked_in_at) if sqlite else cast(checkin_base.c.checked_in_at, Date)
-    session_day = func.date(AttendanceSession.scheduled_start) if sqlite else cast(AttendanceSession.scheduled_start, Date)
-    daily_rows = database.execute(
-        select(checkin_day, func.count())
-        .where(checkin_base.c.checked_in_at >= today - timedelta(days=days - 1))
-        .group_by(checkin_day)
-        .order_by(checkin_day)
-    ).all()
-    daily_slots = dict(database.execute(
-        select(session_day, func.count(Enrollment.id))
-        .join(Enrollment, (Enrollment.course_id == AttendanceSession.course_id)
-              & Enrollment.is_active.is_(True))
-        .join(Course, Course.id == AttendanceSession.course_id)
-        .where(AttendanceSession.scheduled_start >= today - timedelta(days=days - 1), *session_filters)
-        .group_by(session_day)
-    ).all())
-    enrolled_slots = database.scalar(
-        select(func.count()).select_from(Enrollment)
-        .join(AttendanceSession, AttendanceSession.course_id == Enrollment.course_id)
-        .join(Course, Course.id == AttendanceSession.course_id)
-        .where(Enrollment.is_active.is_(True), *session_filters)
-    ) or 0
-    high_today = database.scalar(select(func.count()).select_from(checkin_base).where(
-        checkin_base.c.checked_in_at >= today, checkin_base.c.risk_score >= .5)) or 0
-    total, approved, flagged, average_risk = aggregates
-    checkins_by_day = [{"date": str(day), "count": count} for day, count in daily_rows]
-    return {
-        "total_sessions": total_sessions, "active_sessions": active_sessions,
-        "total_checkins_today": total_today, "total_checkins_week": total_week,
-        "average_attendance_rate": _rate(total, enrolled_slots),
-        "flagged_pending_review": flagged or 0, "approval_rate": _rate(approved or 0, total or 0),
-        "average_risk_score": round(float(average_risk or 0), 4),
-        "high_risk_checkins_today": high_today,
-        "trends": {"checkins_by_day": checkins_by_day,
-                   "attendance_rate_by_day": [
-                       {"date": str(day), "rate": _rate(count, daily_slots.get(day, 0))}
-                       for day, count in daily_rows
-                   ]},
-    }
+        ids = [course.id]
+    sessions, checkins, coverage = load_report(database, ids)
+    grouped = _group(sessions, checkins)
+    summaries = {s.id: attendance(s, grouped[s.id]) for s in sessions}
+    today = business_day(utc_now())
+    daily = {}
+    for session in sessions:
+        day = business_day(session.scheduled_start)
+        if day < today - timedelta(days=min(days, 30) - 1):
+            continue
+        item = daily.setdefault(day, {"count": 0, "approved": 0, "slots": 0, "known": True})
+        summary = summaries[session.id]
+        item["count"] += len(grouped[session.id])
+        item["approved"] += summary["approved_attendance"] or 0
+        item["slots"] += summary["total_enrolled"] or 0
+        item["known"] &= summary["denominator_available"]
+    total = len(checkins)
+    approved = sum(c.status == "approved" for c in checkins)
+    slots = sum(item["total_enrolled"] or 0 for item in summaries.values())
+    trusted_approved = sum(item["approved_attendance"] or 0 for item in summaries.values())
+    session_days = {s.id: business_day(s.scheduled_start) for s in sessions}
+    return {"total_sessions": len(sessions), "active_sessions": sum(s.status == "active" for s in sessions),
+        "total_checkins_today": sum(session_days[c.session_id] == today for c in checkins),
+        "total_checkins_week": sum(session_days[c.session_id] >= today - timedelta(days=6) for c in checkins),
+        "average_attendance_rate": rate(trusted_approved, slots) if coverage["denominator_available"] else None,
+        "flagged_pending_review": sum(c.status in {"flagged", "appealed"} for c in checkins),
+        "approval_rate": rate(approved, total),
+        "average_risk_score": round(sum(c.risk_score for c in checkins) / total, 4) if total else 0,
+        "high_risk_checkins_today": sum(session_days[c.session_id] == today and c.risk_score >= .5 for c in checkins),
+        "coverage": coverage,
+        "trends": {"checkins_by_day": [{"date": day, "count": v["count"]} for day, v in sorted(daily.items())],
+                   "attendance_rate_by_day": [{"date": day, "rate": rate(v["approved"], v["slots"]) if v["known"] else None}
+                                              for day, v in sorted(daily.items())]}}
 
 
 @router.get("/sessions/{session_id}", response_model=SessionStatistics)
@@ -101,8 +75,12 @@ def session_statistics(
 ):
     session = get_session(database, str(session_id))
     course = require_session_access(database, session, user)
-    enrolled = database.scalar(select(func.count()).select_from(Enrollment).where(
-        Enrollment.course_id == session.course_id, Enrollment.is_active.is_(True))) or 0
+    records = list(database.scalars(select(Checkin).where(Checkin.session_id == session.id,
+        Checkin.scheduled_deletion_at > utc_now()).limit(MAX_CHECKINS + 1)))
+    if len(records) > MAX_CHECKINS:
+        raise HTTPException(status_code=422, detail="report exceeds 10000 check-ins")
+    summary = attendance(session, records)
+    enrolled = summary["total_enrolled"]
     if database.get_bind().dialect.name == "sqlite":
         elapsed_minutes = (
             func.strftime("%s", Checkin.checked_in_at)
@@ -118,23 +96,26 @@ def session_statistics(
     aggregate = database.execute(select(
         func.count(Checkin.id), func.avg(Checkin.risk_score),
         func.avg(Checkin.distance_from_venue_meters), func.avg(elapsed_minutes),
-    ).where(Checkin.session_id == session.id)).one()
+    ).where(Checkin.session_id == session.id, Checkin.scheduled_deletion_at > utc_now())).one()
     by_status = dict(database.execute(select(Checkin.status, func.count()).where(
-        Checkin.session_id == session.id).group_by(Checkin.status)).all())
+        Checkin.session_id == session.id, Checkin.scheduled_deletion_at > utc_now()).group_by(Checkin.status)).all())
     risk = database.execute(select(
         func.sum(case((Checkin.risk_score < .3, 1), else_=0)),
         func.sum(case(((Checkin.risk_score >= .3) & (Checkin.risk_score < .5), 1), else_=0)),
         func.sum(case((Checkin.risk_score >= .5, 1), else_=0)),
-    ).where(Checkin.session_id == session.id)).one()
+    ).where(Checkin.session_id == session.id, Checkin.scheduled_deletion_at > utc_now())).one()
     timeline = database.execute(select(bucket.label("minute"), func.count())
-                                .where(Checkin.session_id == session.id)
+                                .where(Checkin.session_id == session.id, Checkin.scheduled_deletion_at > utc_now())
                                 .group_by(bucket).order_by(bucket)).all()
     checked_in, average_risk, average_distance, average_minutes = aggregate
     return {
         "session_id": session.id, "session_name": session.name, "course_code": course.code,
         "scheduled_start": session.scheduled_start, "status": session.status,
         "total_enrolled": enrolled, "checked_in": checked_in,
-        "attendance_rate": _rate(checked_in, enrolled),
+        "attendance_rate": summary["attendance_rate"],
+        "approved_attendance": summary["approved_attendance"],
+        "coverage": {"available_from": (utc_now() - timedelta(days=30)).isoformat(),
+                     "denominator_available": summary["denominator_available"]},
         "by_status": {name: int(by_status.get(name, 0)) for name in ("approved", "flagged", "rejected", "pending", "appealed")},
         "average_risk_score": round(float(average_risk or 0), 4),
         "average_distance_meters": round(float(average_distance or 0), 2),
@@ -144,86 +125,92 @@ def session_statistics(
     }
 
 
+def _course_report(database, course, start_date=None, end_date=None):
+    sessions, checkins, coverage = load_report(database, [course.id], start_date, end_date)
+    grouped = _group(sessions, checkins)
+    summaries = {s.id: attendance(s, grouped[s.id]) for s in sessions}
+    current_ids = set(database.scalars(select(Enrollment.student_id).where(
+        Enrollment.course_id == course.id, Enrollment.is_active.is_(True))))
+    historical_ids = {sid for session in sessions for sid in session.attendance_roster or []}
+    ids = current_ids | historical_ids
+    if len(ids) > 10000:
+        raise HTTPException(status_code=422, detail="report exceeds 10000 students")
+    students = list(database.scalars(select(User).where(User.id.in_(ids)).order_by(User.full_name, User.id)))
+    eligible_counts, attended_counts, risk_values = {}, {}, {}
+    for session in sessions:
+        for sid in set(session.attendance_roster or []):
+            eligible_counts[sid] = eligible_counts.get(sid, 0) + 1
+        for sid in ({c.student_id for c in grouped[session.id] if c.status == "approved"}
+                    & set(session.attendance_roster or [])):
+            attended_counts[sid] = attended_counts.get(sid, 0) + 1
+    for checkin in checkins:
+        risk_values.setdefault(checkin.student_id, []).append(checkin.risk_score)
+    student_items = []
+    for student in students:
+        eligible = eligible_counts.get(student.id, 0)
+        attended = attended_counts.get(student.id, 0)
+        risks = risk_values.get(student.id, [])
+        student_items.append({"student_id": student.id, "student_name": student.full_name,
+            "sessions_attended": attended, "total_sessions": eligible,
+            "attendance_rate": rate(attended, eligible) if coverage["denominator_available"] else None,
+            "average_risk_score": round(sum(risks) / len(risks), 4) if risks else 0})
+    known = coverage["denominator_available"]
+    return {"course_id": course.id, "course_code": course.code, "course_name": course.name,
+        "total_sessions": len(sessions), "total_enrolled": len(current_ids), "coverage": coverage,
+        "overall_attendance_rate": rate(sum(v["approved_attendance"] or 0 for v in summaries.values()),
+            sum(v["total_enrolled"] or 0 for v in summaries.values())) if known else None,
+        "sessions": [{"session_id": s.id, "name": s.name, "date": business_day(s.scheduled_start),
+            "attendance_rate": summaries[s.id]["attendance_rate"], "checked_in": len(grouped[s.id])} for s in sessions],
+        "student_attendance": student_items,
+        "low_attendance_alerts": [{"student_id": item["student_id"], "student_name": item["student_name"],
+            "attendance_rate": item["attendance_rate"], "sessions_missed": item["total_sessions"] - item["sessions_attended"]}
+            for item in student_items if item["attendance_rate"] is not None and item["attendance_rate"] < .75]}
+
+
 @router.get("/courses/{course_id}", response_model=CourseStatistics)
-def course_statistics(
-    course_id: UUID4, start_date: datetime | None = None, end_date: datetime | None = None,
-    database: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.INSTRUCTOR, UserRole.ADMIN)),
-):
+def course_statistics(course_id: UUID4, start_date: datetime | None = None, end_date: datetime | None = None,
+                      database: Session = Depends(get_db),
+                      user: User = Depends(require_roles(UserRole.INSTRUCTOR, UserRole.ADMIN))):
     course = get_course(database, str(course_id))
     require_course_access(database, course, user, allow_ta=False)
-    filters = [AttendanceSession.course_id == course.id]
-    if start_date: filters.append(AttendanceSession.scheduled_start >= as_utc(start_date))
-    if end_date: filters.append(AttendanceSession.scheduled_start <= as_utc(end_date))
-    sessions = database.execute(select(
-        AttendanceSession.id, AttendanceSession.name, AttendanceSession.scheduled_start,
-        func.count(Checkin.id),
-    ).outerjoin(Checkin, Checkin.session_id == AttendanceSession.id).where(*filters)
-      .group_by(AttendanceSession.id).order_by(AttendanceSession.scheduled_start)).all()
-    enrolled = database.scalar(select(func.count()).select_from(Enrollment).where(
-        Enrollment.course_id == course.id, Enrollment.is_active.is_(True))) or 0
-    attendance_filters = [AttendanceSession.course_id == course.id]
-    if start_date: attendance_filters.append(AttendanceSession.scheduled_start >= as_utc(start_date))
-    if end_date: attendance_filters.append(AttendanceSession.scheduled_start <= as_utc(end_date))
-    attendance = (select(Checkin.student_id.label("student_id"),
-                         func.count(Checkin.id).label("attended"),
-                         func.avg(Checkin.risk_score).label("average_risk"))
-                  .join(AttendanceSession, AttendanceSession.id == Checkin.session_id)
-                  .where(*attendance_filters).group_by(Checkin.student_id).subquery())
-    students = database.execute(select(
-        User.id, User.full_name, func.coalesce(attendance.c.attended, 0),
-        func.coalesce(attendance.c.average_risk, 0)
-    ).join(Enrollment, Enrollment.student_id == User.id)
-      .outerjoin(attendance, attendance.c.student_id == User.id)
-      .where(Enrollment.course_id == course.id, Enrollment.is_active.is_(True))
-      .order_by(User.full_name)).all()
-    total_sessions = len(sessions)
-    session_items = [{"session_id": sid, "name": name, "date": when.date(),
-                      "attendance_rate": _rate(count, enrolled), "checked_in": count}
-                     for sid, name, when, count in sessions]
-    student_items = [{"student_id": sid, "student_name": name, "sessions_attended": count,
-                      "attendance_rate": _rate(count, total_sessions),
-                      "average_risk_score": round(float(avg or 0), 4)}
-                     for sid, name, count, avg in students]
-    alerts = [{"student_id": item["student_id"], "student_name": item["student_name"],
-               "attendance_rate": item["attendance_rate"],
-               "sessions_missed": max(0, total_sessions - item["sessions_attended"])}
-              for item in student_items if item["attendance_rate"] < .75]
-    return {"course_id": course.id, "course_code": course.code, "course_name": course.name,
-            "total_sessions": total_sessions, "total_enrolled": enrolled,
-            "overall_attendance_rate": _rate(sum(row[3] for row in sessions), enrolled * total_sessions),
-            "sessions": session_items, "student_attendance": student_items,
-            "low_attendance_alerts": alerts}
+    return _course_report(database, course, start_date, end_date)
 
 
 @router.get("/students/{student_id}", response_model=StudentStatistics)
-def student_statistics(
-    student_id: UUID4, database: Session = Depends(get_db),
-    user: User = Depends(require_roles(UserRole.INSTRUCTOR, UserRole.ADMIN)),
-):
+def student_statistics(student_id: UUID4, database: Session = Depends(get_db),
+                       user: User = Depends(require_roles(UserRole.INSTRUCTOR, UserRole.ADMIN))):
     student = database.get(User, str(student_id))
     if student is None or student.role != "student":
         raise HTTPException(status_code=404, detail="student not found")
-    if not instructor_has_student_relationship(database, user, student.id):
+    sessions, checkins, coverage = load_report(database, accessible_course_ids(user), student_id=student.id)
+    current_ids = set(database.scalars(select(Enrollment.course_id).where(
+        Enrollment.student_id == student.id, Enrollment.is_active.is_(True),
+        Enrollment.course_id.in_(accessible_course_ids(user)))))
+    by_id = {s.id: s for s in sessions}
+    historical_ids = {s.course_id for s in sessions if student.id in (s.attendance_roster or [])}
+    historical_ids.update(by_id[c.session_id].course_id for c in checkins)
+    if user.role != "admin" and not (current_ids or historical_ids):
         raise HTTPException(status_code=403, detail="insufficient permissions")
-    rows = database.execute(select(
-        Course.id, Course.code, func.count(func.distinct(AttendanceSession.id)),
-        func.count(func.distinct(Checkin.id)), func.avg(Checkin.risk_score)
-    ).join(Enrollment, Enrollment.course_id == Course.id)
-      .outerjoin(AttendanceSession, AttendanceSession.course_id == Course.id)
-      .outerjoin(Checkin, (Checkin.session_id == AttendanceSession.id) & (Checkin.student_id == student.id))
-      .where(Enrollment.student_id == student.id, Enrollment.is_active.is_(True))
-      .group_by(Course.id).order_by(Course.code)).all()
-    recent = database.execute(select(AttendanceSession.name, Course.code, Checkin.checked_in_at, Checkin.status)
-                              .join(Checkin, Checkin.session_id == AttendanceSession.id)
-                              .join(Course, Course.id == AttendanceSession.course_id)
-                              .where(Checkin.student_id == student.id)
-                              .order_by(Checkin.checked_in_at.desc()).limit(20)).all()
+    courses = list(database.scalars(select(Course).where(Course.id.in_(current_ids | historical_ids))
+        .order_by(Course.code).limit(101)))
+    if len(courses) > 100:
+        raise HTTPException(status_code=422, detail="student report exceeds 100 courses")
+    reports = []
+    for course in courses:
+        relevant = [s for s in sessions if s.course_id == course.id]
+        eligible = {s.id for s in relevant if student.id in (s.attendance_roster or [])}
+        records = [c for c in checkins if c.session_id in {s.id for s in relevant}]
+        attended = len({c.session_id for c in records if c.status == "approved" and c.session_id in eligible})
+        known = all(s.attendance_roster is not None for s in relevant)
+        reports.append({"course_id":course.id,"course_code":course.code,"student_id":student.id,
+            "student_name":student.full_name,"sessions_attended":attended,"total_sessions":len(eligible),
+            "attendance_rate":rate(attended,len(eligible)) if known else None,
+            "average_risk_score":round(sum(c.risk_score for c in records)/len(records),4) if records else 0})
+    codes = {course.id:course.code for course in courses}
+    recent = sorted(checkins,key=lambda c:as_utc(c.checked_in_at),reverse=True)[:20]
+    coverage["denominator_available"] = all(item["attendance_rate"] is not None for item in reports)
     return {"student_id": student.id, "student_name": student.full_name, "student_email": student.email,
-            "courses": [{"course_id": cid, "course_code": code, "attendance_rate": _rate(attended, total),
-                         "sessions_attended": attended, "total_sessions": total,
-                         "average_risk_score": round(float(avg or 0), 4)}
-                        for cid, code, total, attended, avg in rows],
-            "recent_checkins": [{"session_name": name, "course_code": code,
-                                 "checked_in_at": checked, "status": status}
-                                for name, code, checked, status in recent]}
+        "courses": reports, "coverage": coverage,
+        "recent_checkins": [{"session_name":by_id[c.session_id].name,
+            "course_code":codes[by_id[c.session_id].course_id],"checked_in_at":c.checked_in_at,"status":c.status}
+            for c in recent]}

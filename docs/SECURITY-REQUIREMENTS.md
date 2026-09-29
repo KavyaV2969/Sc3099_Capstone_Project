@@ -124,6 +124,16 @@ def check_rate_limit(key: str, limit: int, window: int) -> bool:
 | Face match threshold | 0.7 | 0.0-1.0 | Face verification pass |
 | Geofence radius | 100m | Configurable | Distance from venue |
 
+The persisted session risk threshold controls approval versus review below the
+critical cutoff. Risk >=0.70 always rejects. Required liveness/face evidence cannot
+be omitted or replaced with an unknown result; valid failed verification rejects.
+Disabled checks have zero contribution without redistributing weights. Enabling
+bonus liveness requires an available service.
+
+New course thresholds default to `RISK_SCORE_THRESHOLD`; sessions inherit their
+course threshold unless explicitly overridden, including an explicit zero.
+Existing stored thresholds are not changed by environment updates.
+
 ### Signal Weights
 
 | Signal Category | Weight | Description |
@@ -278,3 +288,15 @@ Verify:
 - Role-based access control
 - Rate limiting
 - Input validation
+# Backend security implementation â€” 29 September 2026
+
+The current security contract is detailed in
+[BACKEND-COMPLETION.md](BACKEND-COMPLETION.md). Device trust contributes to scoring
+only with verified single-use proof. Network hints are a user-agent heuristic,
+not proof of VPN use. Impossible travel flags review without adding a rejection
+rule. PostgreSQL enforces audit append-only behavior, and application/read-only
+roles cannot bypass it. Consent withdrawal clears enrolled face data; deletion
+requests immediately disable access and schedule anonymization after 30 days.
+Audit evidence remains under the documented indefinite-retention exception.
+New audit locations and stored check-in coordinates use four decimal places;
+geofence evaluation retains full input precision. Bcrypt defaults to cost 10.

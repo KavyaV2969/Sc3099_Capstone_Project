@@ -7,6 +7,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.db import get_db
+from app.config import get_settings
 from app.models import Course, User
 from app.rate_limit import enforce_user_api_limit
 from app.schemas import TokenType, UserRole
@@ -30,9 +31,18 @@ def get_current_user(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid access token") from exc
 
     user = database.get(User, payload.sub)
-    if user is None or not user.is_active:
+    if user is not None:
+        request.state.audit_user_id = user.id
+    deletion_retry = (user is not None and user.scheduled_deletion_at is not None
+                      and request.method == "DELETE"
+                      and request.url.path == get_settings().api_v1_prefix + "/users/me")
+    if user is None or (not user.is_active and not deletion_retry):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="account is unavailable")
 
+    # Release the authentication read transaction before Redis or async I/O.
+    # Mutation handlers re-read their subject under the appropriate row lock.
+    database.expunge(user)
+    database.rollback()
     enforce_user_api_limit(user.id)
     return user
 
