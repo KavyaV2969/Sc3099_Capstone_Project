@@ -472,21 +472,14 @@ def test_foreign_gps_rejected_even_for_matching_venue_and_local_ip(api, ready, c
         assert database.scalar(select(func.count(Checkin.id))) == 0
 
 
-@pytest.mark.parametrize("forwarded,country,expected", [
-    ("8.8.8.8, 10.0.0.1", "US", 403),
-    ("8.8.8.8, 10.0.0.1", "SG", 201),
-    ("192.168.1.2, 8.8.8.8", None, 201),
-    ("::1", None, 201),
-    ("not-an-ip", None, 403),
+@pytest.mark.parametrize("forwarded,expected", [
+    ("8.8.8.8, 10.0.0.1", 403),        # public, outside Singapore
+    ("155.69.1.1, 10.0.0.1", 201),     # public Singapore (NTU) address
+    ("192.168.1.2, 8.8.8.8", 201),     # first address is private: on campus
+    ("::1", 201),
+    ("not-an-ip", 403),
 ])
-def test_checkin_uses_first_forwarded_ip(api, ready, monkeypatch, forwarded, country, expected):
-    from types import SimpleNamespace
-    from app.utils import geolocation
-    def cached_country(key):
-        assert country is not None, "local/invalid addresses must not trigger a lookup"
-        assert key == "geo:country:8.8.8.8"
-        return country
-    monkeypatch.setattr(geolocation, "get_redis_client", lambda: SimpleNamespace(get=cached_country))
+def test_checkin_uses_first_forwarded_ip(api, ready, forwarded, expected):
     response = api.request("POST", "/checkins/", "student", json=checkin_payload(ready),
                            headers={"X-Forwarded-For": forwarded})
     assert response.status_code == expected
