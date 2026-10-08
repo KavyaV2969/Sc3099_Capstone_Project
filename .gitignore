@@ -9,6 +9,5 @@ docs/*
 !docs/BACKEND-COMPLETION.md
 .env
 
-# Private PostgreSQL backups, recovery evidence and disposable test outputs.
-tmp/f00-recovery/
-tmp/backend-completion-private/
+# Local scratch: test runs, recovery evidence and private PostgreSQL backups.
+tmp/
