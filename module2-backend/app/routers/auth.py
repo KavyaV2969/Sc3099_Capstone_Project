@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.audit import write_audit_log
 from app.db import get_db
-from app.models import User, Enrollment, Device
+from app.models import User, Device
 from app.services.enrollments import include_in_active_rosters
 from app.rate_limit import enforce_login_limit, enforce_registration_limit, enforce_user_api_limit
 from app.schemas import LoginRequest, LoginResponse, RefreshTokenRequest, TokenPairResponse, TokenType, UserRegister, UserResponse, UserRole
@@ -133,9 +133,7 @@ def activate(payload: ActivationRequest, request: Request, response: Response,
         user.full_name = payload.full_name
     user.is_active, user.failed_login_attempts = True, 0
     user.activation_token_hash = user.activation_expires_at = None
-    for course_id in database.scalars(select(Enrollment.course_id).where(
-        Enrollment.student_id == user.id, Enrollment.is_active.is_(True)).order_by(Enrollment.course_id)):
-        include_in_active_rosters(database, user.id, course_id)
+    include_in_active_rosters(database, user.id)
     write_audit_log(database, request, action="user_activated", user_id=user.id,
                     resource_type="user", resource_id=user.id, details={"method": "activation_link"})
     database.commit()

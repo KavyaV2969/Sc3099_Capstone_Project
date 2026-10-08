@@ -2018,6 +2018,11 @@ attendance denominators, input bounds, error/retry behavior and correlation.
 Existing `/api/v1` paths remain compatible; the flagged queue intentionally changes from an array to the documented envelope.
 Unsupported mutation fields return 422; nonblank QR input is unsupported.
 Statistics attendance rates can be null when historical denominators are unknown.
+Date ranges with no retained overlap return 422; a valid empty retained period
+still returns zero. Explicit session exports do not apply the course report's
+default scheduled-date range; retained eligible rows and summary agree across
+Singapore midnight. Administrative account activation includes newly eligible
+students in known active rosters without reconstructing closed or unknown history.
 
 Public-consumer compatibility aliases and admin summary/inventory routes are
 listed in [BACKEND-COMPLETION.md](BACKEND-COMPLETION.md#public-test-compatibility-additions--29-september-2026).

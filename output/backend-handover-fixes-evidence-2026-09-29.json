@@ -1,0 +1,369 @@
+{
+  "date": "2026-09-29",
+  "resolved": [
+    "H01",
+    "H02",
+    "H03",
+    "H04"
+  ],
+  "deferred_external_gate": {
+    "id": "H05",
+    "reason": "No functioning face service/fixture supplied; explicitly deferred by user"
+  },
+  "implementation_footprint": "Six existing application files; no new endpoint, dependency, table, column, migration or configuration mode",
+  "targeted_roster": {
+    "tests": 19,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "passed": 19,
+    "seconds": 5.996,
+    "postgresql_cases": 6,
+    "evidence_path": "tmp/backend-handover-roster.xml"
+  },
+  "targeted_retention": {
+    "tests": 12,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "passed": 12,
+    "seconds": 1.774,
+    "postgresql_cases": 0,
+    "evidence_path": "tmp/backend-handover-retention.xml"
+  },
+  "targeted_exports": {
+    "tests": 17,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "passed": 17,
+    "seconds": 2.019,
+    "postgresql_cases": 0,
+    "evidence_path": "tmp/backend-handover-exports.xml"
+  },
+  "backend_full": {
+    "tests": 407,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "passed": 407,
+    "seconds": 97.89,
+    "postgresql_cases": 75,
+    "evidence_path": "tmp/backend-handover-fixed-full.xml"
+  },
+  "original_audit_reproductions": {
+    "tests": 3,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "passed": 3,
+    "seconds": 4.08,
+    "postgresql_cases": 3,
+    "evidence_path": "tmp/backend-handover-fixed-probes.xml"
+  },
+  "public_existing_populated": {
+    "tests": 67,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 1,
+    "passed": 66,
+    "seconds": 16.157,
+    "postgresql_cases": 0,
+    "evidence_path": "tmp/backend-handover-fixed-public.xml"
+  },
+  "public_fresh": {
+    "tests": 67,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 1,
+    "passed": 66,
+    "seconds": 14.394,
+    "postgresql_cases": 0,
+    "evidence_path": "tmp/backend-handover-fixed-public-fresh.xml"
+  },
+  "public_same_instance_populated": {
+    "tests": 67,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 1,
+    "passed": 66,
+    "seconds": 15.032,
+    "postgresql_cases": 0,
+    "evidence_path": "tmp/backend-handover-fixed-public-populated.xml"
+  },
+  "pinned_linux_non_postgresql": {
+    "passed": 332,
+    "failed": 0,
+    "skipped": 0,
+    "seconds": 20.8
+  },
+  "canonical_head": "20260929_0009",
+  "historical_recovery_base": "20260928_0006",
+  "production_image": "sha256:ff5864eb6d97f8288dff207f7b9aa1ccfae3b02e2e06b27409715ef7113302de",
+  "deployed_fixed_source_hashes": {
+    "services/enrollments.py": "b58472c2e2703eb42db965dff042bf93f9c5728f081b7934b93712e686b73f3e",
+    "services/reporting.py": "3f8d19dddc5cb4408398fa1845aefc2223ed730153ece1c4c5ec08dd83fbe79a",
+    "routers/admin.py": "0ad39d3f3e0c3694ba867445e13eda30fe356509f804689b89dc6f34c1d3b4e0",
+    "routers/auth.py": "852660778786be67d7c8230293d05bef2875a7aeefaf5a5f8c9c24cdfc3f0027",
+    "routers/users.py": "17d6fa18e166cfad71b145025e5167c2de76128bb6fd58b93dd71f4ecb4f1441",
+    "routers/export.py": "d4584aa30dd7d1c4f0f40f6bbf070d38cb3f14260f9cc2339b5f11baa4a054c5"
+  },
+  "deployed_source_matches_working_tree": true,
+  "external_sources_match_prior_release": {
+    "tests/_http_fixtures.py": true,
+    "tests/_test_helpers.py": true,
+    "tests/conftest.py": true,
+    "tests/public/test_api_functional.py": true,
+    "tests/public/test_face_recognition.py": true,
+    "tests/public/test_frontend_dashboard.py": true,
+    "tests/public/test_integration.py": true,
+    "tests/public/test_observability.py": true,
+    "tests/public/test_performance.py": true,
+    "tests/public/test_privacy_basic.py": true,
+    "tests/public/test_security_basic.py": true,
+    "tests/scoring/__init__.py": true,
+    "tests/scoring/plugin.py": true
+  },
+  "excluded_modules_and_external_tests_tracked_diff": "",
+  "fresh_deployment_after_restart": {
+    "8000": {
+      "health": {
+        "status": "healthy",
+        "service": "backend",
+        "api": "healthy",
+        "database": "healthy",
+        "redis": "healthy",
+        "schema": "healthy"
+      },
+      "metrics_names_present": true
+    },
+    "18000": {
+      "health": {
+        "status": "healthy",
+        "service": "backend",
+        "api": "healthy",
+        "database": "healthy",
+        "redis": "healthy",
+        "schema": "healthy"
+      },
+      "metrics_names_present": true
+    }
+  },
+  "prometheus_targets": {
+    "prometheus": "up",
+    "saiv-backend": "up",
+    "saiv-face-recognition": "down"
+  },
+  "direct_container_load": [
+    {
+      "concurrent_users": 10,
+      "method": "GET",
+      "route": "/users/me",
+      "requests": 30,
+      "seconds": 0.186,
+      "p95_seconds": 0.061,
+      "max_seconds": 0.064,
+      "statuses": {
+        "200": 30
+      },
+      "unexpected_errors": {},
+      "database_wait_samples": {},
+      "meets_2_second_target": true
+    },
+    {
+      "concurrent_users": 10,
+      "method": "POST",
+      "route": "/checkins/",
+      "requests": 10,
+      "seconds": 0.272,
+      "p95_seconds": 0.261,
+      "max_seconds": 0.261,
+      "statuses": {
+        "201": 10
+      },
+      "unexpected_errors": {},
+      "database_wait_samples": {
+        "Lock:transactionid": 2,
+        "Lock:tuple": 8
+      },
+      "meets_2_second_target": true
+    },
+    {
+      "concurrent_users": 100,
+      "method": "GET",
+      "route": "/users/me",
+      "requests": 300,
+      "seconds": 2.324,
+      "p95_seconds": 1.151,
+      "max_seconds": 1.446,
+      "statuses": {
+        "200": 300
+      },
+      "unexpected_errors": {},
+      "database_wait_samples": {},
+      "meets_2_second_target": true
+    },
+    {
+      "concurrent_users": 100,
+      "method": "POST",
+      "route": "/checkins/",
+      "requests": 100,
+      "seconds": 1.655,
+      "p95_seconds": 1.494,
+      "max_seconds": 1.552,
+      "statuses": {
+        "201": 100
+      },
+      "unexpected_errors": {},
+      "database_wait_samples": {
+        "IO:WALSync": 3,
+        "Lock:transactionid": 3,
+        "Lock:tuple": 4
+      },
+      "meets_2_second_target": true
+    }
+  ],
+  "windows_host_port_load": [
+    {
+      "concurrent_users": 10,
+      "method": "GET",
+      "route": "/users/me",
+      "requests": 30,
+      "seconds": 0.194,
+      "p95_seconds": 0.039,
+      "max_seconds": 0.077,
+      "statuses": {
+        "200": 30
+      },
+      "unexpected_errors": {},
+      "database_wait_samples": {},
+      "meets_2_second_target": true
+    },
+    {
+      "concurrent_users": 10,
+      "method": "POST",
+      "route": "/checkins/",
+      "requests": 10,
+      "seconds": 0.233,
+      "p95_seconds": 0.168,
+      "max_seconds": 0.168,
+      "statuses": {
+        "201": 10
+      },
+      "unexpected_errors": {},
+      "database_wait_samples": {
+        "IO:WALSync": 1,
+        "Lock:transactionid": 2,
+        "Lock:tuple": 11
+      },
+      "meets_2_second_target": true
+    },
+    {
+      "concurrent_users": 100,
+      "method": "GET",
+      "route": "/users/me",
+      "requests": 300,
+      "seconds": 5.572,
+      "p95_seconds": 4.35,
+      "max_seconds": 5.129,
+      "statuses": {
+        "200": 300
+      },
+      "unexpected_errors": {},
+      "database_wait_samples": {},
+      "meets_2_second_target": false
+    },
+    {
+      "concurrent_users": 100,
+      "method": "POST",
+      "route": "/checkins/",
+      "requests": 100,
+      "seconds": 1.682,
+      "p95_seconds": 1.493,
+      "max_seconds": 1.56,
+      "statuses": {
+        "201": 100
+      },
+      "unexpected_errors": {},
+      "database_wait_samples": {
+        "Lock:transactionid": 26,
+        "Lock:tuple": 425,
+        "Client:ClientRead": 1,
+        "IO:WALSync": 2
+      },
+      "meets_2_second_target": true
+    }
+  ],
+  "windows_host_port_initial_load": [
+    {
+      "concurrent_users": 10,
+      "method": "GET",
+      "route": "/users/me",
+      "requests": 30,
+      "seconds": 0.195,
+      "p95_seconds": 0.056,
+      "max_seconds": 0.074,
+      "statuses": {
+        "200": 30
+      },
+      "unexpected_errors": {},
+      "database_wait_samples": {},
+      "meets_2_second_target": true
+    },
+    {
+      "concurrent_users": 10,
+      "method": "POST",
+      "route": "/checkins/",
+      "requests": 10,
+      "seconds": 0.184,
+      "p95_seconds": 0.149,
+      "max_seconds": 0.149,
+      "statuses": {
+        "201": 10
+      },
+      "unexpected_errors": {},
+      "database_wait_samples": {
+        "Lock:transactionid": 2,
+        "Lock:tuple": 9
+      },
+      "meets_2_second_target": true
+    },
+    {
+      "concurrent_users": 100,
+      "method": "GET",
+      "route": "/users/me",
+      "requests": 300,
+      "seconds": 5.747,
+      "p95_seconds": 5.008,
+      "max_seconds": 5.266,
+      "statuses": {
+        "200": 300
+      },
+      "unexpected_errors": {},
+      "database_wait_samples": {},
+      "meets_2_second_target": false
+    },
+    {
+      "concurrent_users": 100,
+      "method": "POST",
+      "route": "/checkins/",
+      "requests": 100,
+      "seconds": 1.545,
+      "p95_seconds": 1.377,
+      "max_seconds": 1.436,
+      "statuses": {
+        "201": 100
+      },
+      "unexpected_errors": {},
+      "database_wait_samples": {
+        "Lock:transactionid": 26,
+        "Lock:tuple": 437,
+        "IO:WALSync": 3,
+        "Client:ClientRead": 1
+      },
+      "meets_2_second_target": true
+    }
+  ],
+  "load_limitation": "Windows host-port 100-user GET p95 exceeds 2 s; direct-container 10/100-user p95 meets target. No request errors in either route. Transport/environment observation retained; biometric latency untested.",
+  "verdict": "Required backend audit fixes resolved and marking tests pass; real biometric interoperability remains deferred, Windows host-port latency recorded separately"
+}

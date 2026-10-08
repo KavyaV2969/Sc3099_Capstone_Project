@@ -1,5 +1,11 @@
 # Check-in verification and weighted scoring repair
 
+> Historical repair evidence from 28 September. Current behavior is defined by
+> [Backend completion](BACKEND-COMPLETION.md): optional consented liveness,
+> nullable accuracy, signed device proof and fraud signals supersede the earlier
+> requirements and limitations below. The dated evidence is preserved, not a
+> current consumer contract. Required face matching remains strict.
+
 Implemented 28 September 2026 for backend audit F01/F02, directly related F04
 finalization and F13 configured defaults. Authority remains grading clarifications,
 Security Requirements, API Specification, recommended design, then the PDFs.

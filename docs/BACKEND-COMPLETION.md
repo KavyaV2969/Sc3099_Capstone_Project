@@ -9,6 +9,11 @@ All required backend implementation rows are now complete. The deployment row's
 real biometric integration gate is deferred by the user because no functioning
 external dependency is available. Detailed evidence is in the [final report](../output/backend-completion-2026-09-29.md).
 
+The subsequent handover audit found H01–H03 reporting/lifecycle edge cases and
+H04 stale consumer guidance. These are corrected by the targeted
+[handover fixes](../output/backend-handover-fixes-2026-09-29.md); the dated audit
+remains evidence of the pre-fix state. Real biometric interoperability is still deferred.
+
 | Outstanding requirement | Finding | Implementation | Required regression evidence | State |
 |---|---|---|---|---|
 | Registration conflicts | R04 | Protect flush/commit | duplicate race and rollback | Complete |
@@ -102,7 +107,8 @@ request correlation are required. Required face matching stays strict; optional 
 
 All API operations below use `/api/v1`. Mutation inputs reject unknown fields
 with 422; `/docs` and `/openapi.json` enumerate their accepted fields. Responses
-preserve existing arrays and envelopes. The accepted compatibility inputs are
+preserve existing arrays and envelopes except the intentional flagged-list
+envelope documented above. The accepted compatibility inputs are
 optional course `instructor_id`, legacy token-duration configuration units, and
 blank/null `qr_code`; a nonblank QR returns 422 and `qr_code_enabled` stays false.
 
@@ -187,12 +193,20 @@ Rejected-only attendance is zero. Snapshot eligibility when a session first
 activates; append newly eligible students while active. Withdrawal/account
 changes do not rewrite history. Administrative resets preserve known snapshots;
 used/legacy unknown rosters are not reconstructed from current enrollment.
+Both administrative account activation paths append newly eligible students to
+known active rosters, just as token activation does; closed/unknown rosters stay intact.
 
 Reporting detail covers retained 30 days, excludes cancelled sessions and
 sessions whose window has not opened, uses scheduled session dates in
 Asia/Singapore, and stores timestamps in UTC. End date defaults to today.
 `coverage` discloses supported start/end, cutoff, retention clamping and
 `denominator_available`. Unknown denominators produce null rates, never absence.
+An explicit date range with no retained overlap returns 422, rather than an
+inverted coverage interval or a misleading zero rate. Valid empty retained
+periods continue to return zero. Explicit session exports select that eligible
+retained session without the course report's scheduled-date bounds, so an open
+window across Singapore midnight agrees with session statistics. Cancelled,
+unopened and expired session windows remain excluded from export rows.
 Course/current enrollment counts remain current-state data. Instructors/admins
 read all students, including empty statistics and profiles without enrollment.
 Retained historical reports survive withdrawal. TA course permissions remain

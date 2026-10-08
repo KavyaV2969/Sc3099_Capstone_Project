@@ -53,7 +53,7 @@ def _response(rows, export_format: ExportFormat, filename: str, headers=None):
 
 
 def _row_query(database: Session, *, course_id=None, session_id=None, start_date=None, end_date=None):
-    filters, coverage = session_filters(start_date, end_date)
+    filters, coverage = session_filters(start_date, end_date, scheduled_dates=session_id is None)
     roster_query = select(AttendanceSession.attendance_roster).where(*filters)
     if course_id: roster_query = roster_query.where(AttendanceSession.course_id == course_id)
     if session_id: roster_query = roster_query.where(AttendanceSession.id == session_id)
@@ -112,7 +112,8 @@ def export_session(session_id: UUID4, request: Request, format: ExportFormat = E
                    user: User = Depends(require_roles(UserRole.INSTRUCTOR, UserRole.ADMIN))):
     session = get_session(database, str(session_id))
     course = require_session_access(database, session, user, allow_ta=False, read_only=True)
-    query, coverage, count = _row_query(database, session_id=session.id)
+    query, coverage, count = _row_query(database, session_id=session.id,
+        end_date=max(as_utc(session.scheduled_end), utc_now()))
     rows = _rows(database.get_bind(), query)
     records = list(database.scalars(select(Checkin).where(Checkin.session_id == session.id,
         Checkin.scheduled_deletion_at > utc_now()).limit(MAX_CHECKINS + 1)))

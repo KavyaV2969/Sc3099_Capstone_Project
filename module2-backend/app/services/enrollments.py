@@ -26,10 +26,17 @@ def capture_roster(database: Session, session: AttendanceSession) -> None:
                 Enrollment.is_active.is_(True), User.is_active.is_(True), User.role == "student")))
 
 
-def include_in_active_rosters(database: Session, student_id: str, course_id: str) -> None:
+def include_in_active_rosters(database: Session, student_id: str, course_id: str | None = None) -> None:
+    # Account activation holds the user lock, then locks eligible courses before sessions.
+    course_ids = [course_id] if course_id is not None else list(database.scalars(
+        select(Course.id).where(Course.is_active.is_(True), Course.id.in_(
+            select(Enrollment.course_id).where(Enrollment.student_id == student_id,
+                Enrollment.is_active.is_(True))))
+        .order_by(Course.id).with_for_update()))
     for session in database.scalars(select(AttendanceSession).where(
-        AttendanceSession.course_id == course_id, AttendanceSession.status == "active")
-        .order_by(AttendanceSession.id).with_for_update()):
+        AttendanceSession.course_id.in_(course_ids), AttendanceSession.status == "active")
+        .order_by(AttendanceSession.course_id, AttendanceSession.id).with_for_update()
+        .execution_options(populate_existing=True)):
         if session.attendance_roster is not None and student_id not in session.attendance_roster:
             session.attendance_roster = sorted([*session.attendance_roster, student_id])
 

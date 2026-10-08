@@ -43,7 +43,8 @@ def test_enrollment_refreshes_locked_eligibility_after_concurrent_deactivation(c
         assert db.scalar(select(func.count()).select_from(Enrollment))==0
 
 
-def test_activation_and_enrollment_race_preserves_eligible_roster(canonical):
+@pytest.mark.parametrize("account_change", ["enroll", "reactivate"])
+def test_activation_and_enrollment_race_preserves_eligible_roster(canonical, account_change):
     from app.models import Session as AttendanceSession
     from app.services.access import get_session_for_mutation
     from app.services.enrollments import capture_roster
@@ -56,13 +57,20 @@ def test_activation_and_enrollment_race_preserves_eligible_roster(canonical):
         session=AttendanceSession(course_id=course.id,instructor_id=teacher.id,name="Roster",
             scheduled_start=now,scheduled_end=now+timedelta(hours=1),checkin_opens_at=now,
             checkin_closes_at=now+timedelta(hours=1),venue_latitude=1.3483,venue_longitude=103.6831,geofence_radius_meters=100)
-        db.add(session); db.flush(); uid,cid,sid=student.id,course.id,session.id; db.commit()
+        db.add(session); db.flush(); uid,cid,sid,tid=student.id,course.id,session.id,teacher.id
+        if account_change == "reactivate":
+            student.is_active = False
+            db.add(Enrollment(student_id=uid, course_id=cid))
+        db.commit()
     barrier=Barrier(2)
     def change(operation):
         with Session(canonical) as db:
             barrier.wait(timeout=10)
             if operation=="activate":
                 session=get_session_for_mutation(db,sid); capture_roster(db,session); session.status="active"
+            elif account_change == "reactivate":
+                from app.routers.admin import _set_account_status
+                _set_account_status(uid, True, request(), db, db.get(User, tid))
             else: create_enrollment(db,student_id=uid,course_id=cid)
             db.commit()
     with ThreadPoolExecutor(2) as pool: list(pool.map(change,["activate","enroll"]))

@@ -1,6 +1,6 @@
 """User profile, directory, and face-enrollment routes."""
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import UUID4
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session
@@ -17,6 +17,7 @@ from app.schemas import (
     UserProfileUpdate, UserResponse, UserRole, as_utc,
 )
 from app.services.access import instructor_has_student_relationship
+from app.services.enrollments import include_in_active_rosters
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -126,6 +127,8 @@ def update_user(
         setattr(user, field, value.value if isinstance(value, UserRole) else value)
     if changes.get("is_active") is True:
         user.failed_login_attempts = 0
+        if user.role == "student":
+            include_in_active_rosters(database, user.id)
     write_audit_log(
         database, request, action="user_updated", user_id=admin.id,
         resource_type="user", resource_id=user.id,

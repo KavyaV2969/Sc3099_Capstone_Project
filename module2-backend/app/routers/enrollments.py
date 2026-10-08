@@ -12,13 +12,13 @@ from sqlalchemy.orm import Session
 from app.audit import write_audit_log
 from app.config import get_settings
 from app.db import get_db
-from app.dependencies import get_course_or_404, require_course_access, require_roles
+from app.dependencies import require_roles
+from app.services.access import get_course, require_course_access
 from app.models import Course, Enrollment, User, utc_now
 from app.security import hash_password
 from app.schemas import (BulkEnrollmentCreate, BulkEnrollmentResponse, CourseEnrollmentsResponse,
                          EnrollmentCreate, EnrollmentResponse, MyEnrollmentResponse, UserRole)
 from app.services.enrollments import create_enrollment as create_enrollment_record
-from app.services.access import get_course
 
 router = APIRouter(prefix="/enrollments", tags=["enrollments"])
 
@@ -43,7 +43,7 @@ def course_enrollments(course_id: UUID4, is_active: bool = True, search: str | N
                        limit: int = Query(100, ge=1, le=100), offset: int = Query(0, ge=0),
                        current_user: User = Depends(require_roles(UserRole.INSTRUCTOR, UserRole.TA, UserRole.ADMIN)),
                        database: Session = Depends(get_db)):
-    course = get_course_or_404(database, str(course_id))
+    course = get_course(database, str(course_id))
     require_course_access(database, course, current_user, allow_ta=True, read_only=True)
     query = select(Enrollment, User).join(User, Enrollment.student_id == User.id).where(
         Enrollment.course_id == course.id, Enrollment.is_active == is_active)
@@ -64,14 +64,14 @@ def course_enrollments(course_id: UUID4, is_active: bool = True, search: str | N
 def create_enrollment(payload: EnrollmentCreate, request: Request,
                       current_user: User = Depends(require_roles(UserRole.INSTRUCTOR, UserRole.ADMIN)),
                       database: Session = Depends(get_db)):
-    course = get_course_or_404(database, str(payload.course_id))
-    require_course_access(database, course, current_user)
+    course = get_course(database, str(payload.course_id))
+    require_course_access(database, course, current_user, allow_ta=False)
     if not course.is_active:
         raise HTTPException(status_code=400, detail="course is inactive")
     enrollment = create_enrollment_record(
         database, student_id=str(payload.student_id), course_id=course.id
     )
-    require_course_access(database, course, current_user)
+    require_course_access(database, course, current_user, allow_ta=False)
     try:
         database.flush()
     except IntegrityError:
@@ -92,7 +92,7 @@ def bulk_enroll(
     current_user: User = Depends(require_roles(UserRole.INSTRUCTOR, UserRole.ADMIN)),
     database: Session = Depends(get_db),
 ):
-    course = get_course_or_404(database, str(payload.course_id))
+    course = get_course(database, str(payload.course_id))
     require_course_access(database, course, current_user, allow_ta=False)
     if not course.is_active:
         raise HTTPException(status_code=400, detail="course is inactive")
@@ -173,8 +173,8 @@ def delete_enrollment(enrollment_id: UUID4, request: Request,
     enrollment = database.get(Enrollment, str(enrollment_id))
     if enrollment is None:
         raise HTTPException(status_code=404, detail="enrollment not found")
-    course = get_course_or_404(database, enrollment.course_id)
-    require_course_access(database, course, current_user)
+    course = get_course(database, enrollment.course_id)
+    require_course_access(database, course, current_user, allow_ta=False)
     write_audit_log(database, request, action="enrollment_removed", user_id=current_user.id,
                     resource_type="enrollment", resource_id=enrollment.id)
     database.delete(enrollment)

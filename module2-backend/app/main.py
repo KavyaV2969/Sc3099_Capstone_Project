@@ -4,7 +4,7 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager, contextmanager
 
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response

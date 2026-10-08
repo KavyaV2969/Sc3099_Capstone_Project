@@ -9,7 +9,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Configuration required by the Week 2 backend foundation."""
+    """Runtime settings for the backend."""
 
     model_config = SettingsConfigDict(
         env_file=".env",

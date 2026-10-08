@@ -7,9 +7,10 @@ from sqlalchemy.orm import Session
 
 from app.audit import write_audit_log
 from app.db import get_db
-from app.dependencies import get_current_user, get_course_or_404, require_roles
+from app.dependencies import get_current_user, require_roles
 from app.models import Course, User
 from app.schemas import CourseCreate, CourseListResponse, CourseResponse, CourseUpdate, UserRole
+from app.services.access import get_course as get_course_or_404
 
 router = APIRouter(prefix="/courses", tags=["courses"])
 

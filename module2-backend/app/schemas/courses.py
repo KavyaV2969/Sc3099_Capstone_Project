@@ -5,7 +5,7 @@ from typing import Literal
 from app.config import default_risk_threshold
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, UUID4, field_validator, model_validator
 
-from .common import MutationModel, bounded_image, CourseCode, Latitude, Longitude, Radius, RiskScore, ShortName
+from .common import MutationModel, CourseCode, Latitude, Longitude, Radius, RiskScore, ShortName
 
 
 class CourseCreate(MutationModel):

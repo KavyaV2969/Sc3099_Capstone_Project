@@ -366,6 +366,82 @@ def test_approved_rates_and_roster_survive_withdrawal(api, ready):
     assert api.request("GET", f"/export/session/{ready['id']}?format=json").json()["summary"]["attendance_rate"] == 0
 
 
+def test_explicit_session_exports_retained_attendance_outside_default_dates(api, ready):
+    import csv, io
+    from datetime import datetime, timezone
+    from app.services.reporting import business_day, SINGAPORE
+    now = utc_now()
+    day = business_day(now) + timedelta(days=1)
+    start = datetime.combine(day, datetime.min.time(), SINGAPORE).astimezone(timezone.utc)
+    response = api.request("PATCH", f"/sessions/{ready['id']}", json={
+        "scheduled_start": start.isoformat(),
+        "scheduled_end": max(start + timedelta(hours=1), now + timedelta(hours=1)).isoformat(),
+        "checkin_opens_at": (now - timedelta(minutes=1)).isoformat(),
+        "checkin_closes_at": max(start + timedelta(minutes=30), now + timedelta(minutes=30)).isoformat()})
+    assert response.status_code == 200
+    assert api.request("POST", "/checkins/", "student", json=checkin_payload(ready)).status_code == 201
+    stats = api.request("GET", f"/stats/sessions/{ready['id']}").json()
+    exported = api.request("GET", f"/export/session/{ready['id']}?format=json").json()
+    assert stats["checked_in"] == exported["summary"]["total"] == len(exported["records"]) == 1
+    assert stats["approved_attendance"] == exported["summary"]["approved_attendance"] == 1
+    assert stats["attendance_rate"] == exported["summary"]["attendance_rate"] == 1
+    assert exported["coverage"]["denominator_available"]
+    csv_export = api.request("GET", f"/export/session/{ready['id']}?format=csv")
+    rows = list(csv.DictReader(io.StringIO(csv_export.text)))
+    assert len(rows) == 1 and rows[0]["session_date"] == day.isoformat()
+
+
+@pytest.mark.parametrize("state", ["cancelled", "expired", "not_open"])
+def test_explicit_export_preserves_unavailable_session_exclusions(api, ready, state):
+    assert api.request("POST", "/checkins/", "student", json=checkin_payload(ready)).status_code == 201
+    with api.database() as db:
+        session = db.get(AttendanceSession, ready["id"])
+        if state == "cancelled":
+            session.status = state
+        else:
+            opens = utc_now() + timedelta(days=-31 if state == "expired" else 1)
+            session.checkin_opens_at, session.checkin_closes_at = opens, opens + timedelta(hours=1)
+        db.commit()
+    result = api.request("GET", f"/export/session/{ready['id']}?format=json")
+    assert result.status_code == 200
+    assert result.json()["records"] == [] and result.json()["summary"]["total"] == 0
+    assert result.json()["summary"]["attendance_rate"] is None
+    assert not result.json()["coverage"]["denominator_available"]
+
+
+@pytest.mark.parametrize("endpoint", ["activate", "update"])
+@pytest.mark.parametrize("roster_state", ["active", "closed", "legacy"])
+def test_admin_reactivation_preserves_roster_and_counts_approved_attendance(api, course, session, endpoint, roster_state):
+    uid = api.users["other_student"].id
+    for student_id in [uid, api.users["student"].id]:
+        assert api.request("POST", "/enrollments/", json={
+            "course_id": course["id"], "student_id": student_id}).status_code == 201
+    assert api.request("PATCH", f"/admin/users/{uid}/deactivate", "admin").status_code == 200
+    assert api.request("PATCH", f"/sessions/{session['id']}", json={"status": "active"}).status_code == 200
+    with api.database() as db:
+        record = db.get(AttendanceSession, session["id"])
+        if roster_state == "closed":
+            record.status = "closed"
+        elif roster_state == "legacy":
+            record.attendance_roster = None
+        db.commit()
+    path = f"/admin/users/{uid}/activate" if endpoint == "activate" else f"/users/{uid}"
+    options = {} if endpoint == "activate" else {"json": {"is_active": True}}
+    for _ in range(2):
+        assert api.request("PATCH", path, "admin", **options).status_code == 200
+    with api.database() as db:
+        roster = db.get(AttendanceSession, session["id"]).attendance_roster
+    expected = sorted([uid, api.users["student"].id]) if roster_state == "active" else (
+        None if roster_state == "legacy" else [api.users["student"].id])
+    assert roster == expected
+    if roster_state == "active":
+        response = api.request("POST", "/checkins/", "other_student", json=checkin_payload(session))
+        assert response.status_code == 201 and response.json()["status"] == "approved"
+        stats = api.request("GET", f"/stats/sessions/{session['id']}").json()
+        assert stats["by_status"]["approved"] == stats["approved_attendance"] == 1
+        assert stats["total_enrolled"] == 2 and stats["attendance_rate"] == .5
+
+
 @pytest.mark.parametrize("prefix",["\t","\u00a0"])
 def test_legacy_roster_is_unavailable_and_csv_formulas_are_neutralized(api, ready, prefix):
     assert api.request("POST", "/checkins/", "student", json=checkin_payload(ready)).status_code == 201
@@ -397,6 +473,46 @@ def test_reports_disclose_retention_and_exclude_cancelled_future_sessions(api, r
     assert stats["total_sessions"] == 1 and stats["coverage"]["limited_by_retention"]
     api.request("PATCH", f"/sessions/{ready['id']}", json={"status": "cancelled"})
     assert api.request("GET", f"/stats/courses/{ready['course_id']}").json()["total_sessions"] == 0
+
+
+@pytest.mark.parametrize("start_days,end_days,valid", [
+    (60, 45, False), (None, 45, False), (45, 5, True), (5, 1, True),
+    (None, None, True), (10, 15, False),
+])
+def test_reporting_window_validates_retained_intersection(monkeypatch, start_days, end_days, valid):
+    from app.services import reporting
+    now = utc_now()
+    monkeypatch.setattr(reporting, "utc_now", lambda: now)
+    start = now - timedelta(days=start_days) if start_days is not None else None
+    end = now - timedelta(days=end_days) if end_days is not None else None
+    if not valid:
+        with pytest.raises(HTTPException) as error:
+            reporting.window(start, end)
+        assert error.value.status_code == 422
+    else:
+        lower, upper, coverage = reporting.window(start, end)
+        assert now - timedelta(days=30) <= lower <= upper
+        assert coverage["start"] <= coverage["end"]
+        assert coverage["limited_by_retention"] == (start_days is not None and start_days > 30)
+
+
+def test_course_reports_reject_expired_ranges_but_preserve_valid_empty_periods(api, ready):
+    cid = ready["course_id"]
+    now = utc_now()
+    for route in [f"/stats/courses/{cid}", f"/export/attendance/{cid}?format=json",
+                  f"/export/attendance/{cid}?format=csv"]:
+        response = api.request("GET", route, params={
+            "start_date": (now - timedelta(days=60)).isoformat(),
+            "end_date": (now - timedelta(days=45)).isoformat()})
+        assert response.status_code == 422
+    partial = api.request("GET", f"/stats/courses/{cid}", params={
+        "start_date": (now - timedelta(days=45)).isoformat()}).json()
+    assert partial["total_sessions"] == 1 and partial["coverage"]["limited_by_retention"]
+    empty = api.request("GET", f"/stats/courses/{cid}", params={
+        "start_date": (now - timedelta(days=2)).isoformat(),
+        "end_date": (now - timedelta(days=1)).isoformat()}).json()
+    assert empty["total_sessions"] == 0 and empty["overall_attendance_rate"] == 0
+    assert empty["coverage"]["denominator_available"]
 
 
 def test_consent_withdrawal_erases_face_and_deletion_is_idempotent(api):

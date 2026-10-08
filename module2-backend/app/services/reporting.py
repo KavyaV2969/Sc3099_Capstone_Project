@@ -28,16 +28,21 @@ def window(start=None, end=None):
     lower = as_utc(start) if start else cutoff
     if lower > upper:
         raise HTTPException(status_code=422, detail="start_date must not be after end_date")
-    return max(lower, cutoff), upper, {"available_from": cutoff.isoformat(),
-        "start": max(lower, cutoff).isoformat(), "end": upper.isoformat(),
+    supported_start = max(lower, cutoff)
+    if supported_start > upper:
+        raise HTTPException(status_code=422, detail="date range has no retained reporting coverage")
+    return supported_start, upper, {"available_from": cutoff.isoformat(),
+        "start": supported_start.isoformat(), "end": upper.isoformat(),
         "limited_by_retention": lower < cutoff, "denominator_available": True}
 
 
-def session_filters(start=None, end=None):
+def session_filters(start=None, end=None, *, scheduled_dates=True):
     lower, upper, coverage = window(start, end)
-    return [AttendanceSession.status != "cancelled", AttendanceSession.checkin_opens_at <= utc_now(),
-            AttendanceSession.checkin_opens_at >= utc_now() - timedelta(days=30),
-            AttendanceSession.scheduled_start >= lower, AttendanceSession.scheduled_start <= upper], coverage
+    filters = [AttendanceSession.status != "cancelled", AttendanceSession.checkin_opens_at <= utc_now(),
+               AttendanceSession.checkin_opens_at >= utc_now() - timedelta(days=30)]
+    if scheduled_dates:
+        filters += [AttendanceSession.scheduled_start >= lower, AttendanceSession.scheduled_start <= upper]
+    return filters, coverage
 
 
 def load_report(database, course_ids, start=None, end=None, *, student_id=None):

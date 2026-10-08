@@ -7,11 +7,11 @@ from sqlalchemy.orm import Session as DatabaseSession
 
 from app.audit import write_audit_log
 from app.db import get_db
-from app.dependencies import get_current_user, get_course_or_404, require_roles
+from app.dependencies import get_current_user, require_roles
 from app.models import Checkin, Course, CourseTA, Enrollment, Session, User, utc_now
 from app.schemas import (SessionCreate, SessionListResponse, SessionResponse, SessionStatus,
                          SessionUpdate, UserRole, as_utc)
-from app.services.access import get_session_for_mutation as get_session_record
+from app.services.access import get_course, get_session_for_mutation as get_session_record
 from app.services.enrollments import capture_roster
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
@@ -125,7 +125,7 @@ def get_session(session_id: UUID4, current_user: User = Depends(get_current_user
 def create_session(payload: SessionCreate, request: Request,
                    current_user: User = Depends(require_roles(UserRole.INSTRUCTOR, UserRole.ADMIN)),
                    database: DatabaseSession = Depends(get_db)):
-    course = get_course_or_404(database, str(payload.course_id))
+    course = get_course(database, str(payload.course_id))
     if current_user.role != "admin" and course.instructor_id is not None and course.instructor_id != current_user.id:
         raise HTTPException(status_code=403, detail="course belongs to another instructor")
     if not course.is_active:
@@ -160,7 +160,7 @@ def update_session(session_id: UUID4, payload: SessionUpdate, request: Request,
     new_status = changes.get("status", session.status)
     if new_status != session.status and new_status not in TRANSITIONS[session.status]:
         raise HTTPException(status_code=400, detail="invalid session status transition")
-    if new_status == "active" and not get_course_or_404(database, session.course_id).is_active:
+    if new_status == "active" and not get_course(database, session.course_id).is_active:
         raise HTTPException(status_code=400, detail="course is inactive")
     for field, value in changes.items():
         setattr(session, field, value)

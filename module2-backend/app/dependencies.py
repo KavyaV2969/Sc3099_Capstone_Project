@@ -8,11 +8,10 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.config import get_settings
-from app.models import Course, User
+from app.models import User
 from app.rate_limit import enforce_user_api_limit
 from app.schemas import TokenType, UserRole
 from app.security import InvalidTokenError, decode_token
-from app.services.access import get_course as _get_course, require_course_access as _require_course_access
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -56,13 +55,3 @@ def require_roles(*allowed_roles: UserRole) -> Callable[..., User]:
         return current_user
 
     return role_guard
-
-
-def get_course_or_404(database: Session, course_id: str) -> Course:
-    return _get_course(database, course_id)
-
-
-def require_course_access(
-    database: Session, course: Course, user: User, *, allow_ta: bool = False, read_only: bool = False
-) -> None:
-    _require_course_access(database, course, user, allow_ta=allow_ta, read_only=read_only)

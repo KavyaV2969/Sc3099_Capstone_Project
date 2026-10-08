@@ -208,8 +208,9 @@ face = await verify_face(reference_template_hash, image_base64)
 ### Check-in integration and retry behavior
 
 1. Read current session requirements and obtain required consents/enrollment.
-2. Supply a nonblank image if either verification flag is true. When both are
-   false, the backend makes no biometric calls and records null biometric fields.
+2. Required face matching needs camera consent, face enrollment and a nonblank
+   image. Optional liveness runs only when its session flag, camera consent and
+   nonblank image are all present; otherwise its fields are null and no call is made.
 3. Backend persists an attempt and releases the transaction before remote calls.
 4. After calls, it refreshes and locks eligibility in the order user, course,
    session, enrollment, device. Changed verification flags or reference hash return
@@ -222,9 +223,12 @@ face = await verify_face(reference_template_hash, image_base64)
 6. Attendance, device counters and outcome audit commit together. Never retry a
    persisted rejected check-in as though it were a transient dependency failure.
 
-Liveness is a bonus capability. Disable its session requirement explicitly when
-unavailable; a required check must never be silently skipped. Network detection and
-cryptographic device proof remain separate work. Image data stays transient.
+Liveness is optional; evaluated failures still reject, and unavailable/malformed
+service evidence produces controlled errors. Required face matching cannot be
+skipped. Cryptographic one-use device proof and user-agent VPN/proxy hints are
+implemented; unsigned inventory remains unknown-device risk. The network hint
+cannot establish actual VPN use. See [current contracts](../BACKEND-COMPLETION.md)
+for signature encoding and approved public-contract exceptions. Image data stays transient.
 
 ---
 

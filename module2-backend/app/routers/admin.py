@@ -9,7 +9,6 @@ from sqlalchemy.orm import Session
 from app.audit import write_audit_log
 from app.db import get_db
 from app.dependencies import require_roles
-from app.models import Session as AttendanceSession
 from app.models import User
 from app.schemas import (
     AdminActionResponse, AdminSessionStatusResponse, AdminSessionStatusUpdate,
@@ -17,7 +16,7 @@ from app.schemas import (
     EnrollmentResponse, UserRole,
 )
 from app.security import hash_password
-from app.services.enrollments import create_enrollment, capture_roster
+from app.services.enrollments import create_enrollment, capture_roster, include_in_active_rosters
 
 router = APIRouter(prefix="/admin", tags=["administration"])
 admin_only = require_roles(UserRole.ADMIN)
@@ -38,6 +37,8 @@ def _set_account_status(
     user.is_active = active
     if active:
         user.failed_login_attempts = 0
+        if user.role == "student":
+            include_in_active_rosters(database, user.id)
     write_audit_log(
         database,
         request,
@@ -152,3 +153,4 @@ def admin_create_enrollment(
     database.commit()
     database.refresh(enrollment)
     return enrollment
+

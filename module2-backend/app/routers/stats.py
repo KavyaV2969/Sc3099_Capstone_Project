@@ -1,16 +1,16 @@
 """SQL-backed instructor dashboard statistics."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import UUID4
-from sqlalchemy import case, cast, Date, func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.dependencies import require_roles
-from app.models import Checkin, Course, Enrollment, Session as AttendanceSession, User, utc_now
-from app.services.reporting import attendance, business_day, load_report, rate, session_filters, MAX_CHECKINS
+from app.models import Checkin, Course, Enrollment, User, utc_now
+from app.services.reporting import attendance, business_day, load_report, rate, MAX_CHECKINS
 from app.schemas import (CourseStatistics, OverviewStatistics, SessionStatistics,
                          StudentStatistics, UserRole, as_utc)
 from app.services.access import accessible_course_ids, get_course, get_session, require_course_access, require_session_access
