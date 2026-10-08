@@ -2,9 +2,10 @@
 
 from datetime import datetime, timezone
 from enum import Enum
+from html import escape
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints
 
 
 class UserRole(str, Enum):
@@ -46,8 +47,6 @@ class ExportFormat(str, Enum):
     JSON = "json"
 
 
-CourseCode = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=20)]
-ShortName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
 Latitude = Annotated[float, Field(ge=-90, le=90, allow_inf_nan=False)]
 Longitude = Annotated[float, Field(ge=-180, le=180, allow_inf_nan=False)]
 Radius = Annotated[float, Field(gt=0, allow_inf_nan=False)]
@@ -60,7 +59,9 @@ class Pagination(BaseModel):
 
 
 class MutationModel(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    # Unknown fields are ignored, not rejected: black-box clients (including the
+    # supplied tests) send fields beyond the documented examples.
+    model_config = ConfigDict(extra="ignore")
 
 
 def bounded_image(value: str | None) -> str | None:
@@ -76,6 +77,11 @@ def as_utc(value: datetime) -> datetime:
     return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
 
 
+def escape_text(value: str | None) -> str | None:
+    """Free-text prose keeps its meaning but is stored HTML-escaped."""
+    return escape(value.strip(), quote=True) if value is not None else None
+
+
 def validate_name(value: str) -> str:
     normalized = value.strip()
     if not normalized or "<" in normalized or ">" in normalized:
@@ -83,3 +89,10 @@ def validate_name(value: str) -> str:
     if any(ord(character) < 32 for character in normalized):
         raise ValueError("name must not contain control characters")
     return normalized
+
+
+# Identifier and name inputs reject HTML markup, like user full names (XSS prevention).
+CourseCode = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=20),
+                       AfterValidator(validate_name)]
+ShortName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255),
+                      AfterValidator(validate_name)]

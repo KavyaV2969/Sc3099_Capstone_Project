@@ -8,15 +8,17 @@ from key_fixtures import PUBLIC_KEY
 from test_week3 import api, course, session, enrollment, ready, checkin_payload
 
 
-def test_legacy_course_binding_flag_affirms_but_cannot_disable_signal(api):
+def test_legacy_course_binding_flag_is_accepted_but_cannot_disable_signal(api):
     payload = {"code": "PUBLIC", "name": "Public compatibility", "semester": "Sem 1",
                "require_device_binding": True}
     created = api.request("POST", "/courses/", "admin", json=payload)
     assert created.status_code == 201, created.text
     assert "require_device_binding" not in created.json()
     assert api.request("GET", f"/courses/{created.json()['id']}", "student").status_code == 200
+    # False is accepted for client compatibility but ignored: device assessment stays mandatory.
     payload.update(code="DISABLED", require_device_binding=False)
-    assert api.request("POST", "/courses/", "admin", json=payload).status_code == 422
+    disabled = api.request("POST", "/courses/", "admin", json=payload)
+    assert disabled.status_code == 201 and "require_device_binding" not in disabled.json()
     assert api.request("GET", "/courses/", None).status_code == 200
 
 

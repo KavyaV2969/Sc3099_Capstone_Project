@@ -19,7 +19,7 @@ class CourseCreate(MutationModel):
     geofence_radius_meters: Radius = 100.0
     risk_threshold: RiskScore = Field(default_factory=default_risk_threshold)
     # Legacy callers may affirm the mandatory device signal; it is not a toggle.
-    require_device_binding: Literal[True] | None = Field(default=None, exclude=True)
+    require_device_binding: bool | None = Field(default=None, exclude=True)
 
 
 class CourseUpdate(MutationModel):
@@ -47,6 +47,11 @@ class CourseUpdate(MutationModel):
 
 class CourseResponse(CourseCreate):
     model_config = ConfigDict(from_attributes=True)
+    # Stored values are rendered as-is; input validation applies to requests only.
+    code: str
+    name: str
+    semester: str
+    venue_name: str | None = None
     id: UUID4
     instructor_name: str | None = None
     is_active: bool

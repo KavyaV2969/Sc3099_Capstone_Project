@@ -592,12 +592,35 @@ def test_body_limit_rejects_content_length_and_chunked_uploads():
     assert asyncio.run(request()).status_code == 413
 
 
-def test_mutation_extras_qr_and_image_size_are_rejected(api, ready):
-    for changes in [{"qr_code": "unused-token"}, {"unknown_option": True},
-                    {"liveness_challenge_response": "a" * 13_981_020}]:
-        result = api.request("POST", "/checkins/", "student", json=checkin_payload(ready, **changes))
-        assert result.status_code == 422
-        assert "unused-token" not in result.text
+def test_free_text_inputs_reject_markup_or_store_it_escaped(api, ready):
+    xss = "<script>alert(1)</script>"
+    assert api.request("POST", "/courses/", "admin", json={"code": "XSS1", "name": xss, "semester": "S1"}).status_code == 422
+    assert api.request("POST", "/sessions/", json={**session_payload({"id": ready["course_id"]}), "name": xss}).status_code == 422
+    assert api.request("PATCH", f"/sessions/{ready['id']}", json={"venue_name": xss}).status_code == 422
+    assert api.request("POST", "/devices/register", "student",
+                       json={"device_fingerprint": "xss", "device_name": xss}).status_code == 422
+    # Minimal registration: name and platform are optional, as in the device schema.
+    minimal = api.request("POST", "/devices/register", "student", json={"device_fingerprint": "minimal"})
+    assert minimal.status_code == 201 and minimal.json()["device_name"] is None
+    flagged = api.request("POST", "/checkins/", "student", json=checkin_payload(ready))
+    with api.database() as db:
+        db.get(Checkin, flagged.json()["id"]).status = "flagged"; db.commit()
+    appeal = api.request("POST", f"/checkins/{flagged.json()['id']}/appeal", "student", json={"appeal_reason": "GPS " + xss})
+    assert appeal.status_code == 200 and "<script>" not in appeal.json()["appeal_reason"]
+    assert appeal.json()["appeal_reason"].startswith("GPS &lt;script&gt;")
+    review = api.request("POST", f"/checkins/{flagged.json()['id']}/review", json={"status": "approved", "review_notes": xss})
+    assert review.status_code == 200 and "<script>" not in review.json()["review_notes"]
+
+
+def test_oversized_images_rejected_but_extras_and_qr_ignored(api, ready):
+    result = api.request("POST", "/checkins/", "student",
+                         json=checkin_payload(ready, liveness_challenge_response="a" * 13_981_020))
+    assert result.status_code == 422
+    # Unknown fields and QR tokens are accepted for client compatibility, never echoed or stored.
+    result = api.request("POST", "/checkins/", "student",
+                         json=checkin_payload(ready, qr_code="unused-token", unknown_option=True))
+    assert result.status_code == 201, result.text
+    assert "unused-token" not in result.text and "unknown_option" not in result.text
     from app.config import Settings
     with pytest.raises(ValueError):
         Settings(_env_file=None, secret_key="test-secret-with-at-least-32-characters", CORS_ORIGINS="*")

@@ -43,8 +43,10 @@ def register_device(
                 key = device.public_key
             if device.public_key != key:
                 device.is_trusted, device.trust_score = False, "low"
-            device.device_name = payload.device_name
-            device.platform = payload.platform
+            if payload.device_name is not None:
+                device.device_name = payload.device_name
+            if payload.platform is not None:
+                device.platform = payload.platform
             device.public_key = key
             device.is_active = True
         device.last_seen_at = utc_now()
