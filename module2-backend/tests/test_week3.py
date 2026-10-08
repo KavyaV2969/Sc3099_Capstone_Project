@@ -262,10 +262,12 @@ def test_session_lists_are_scoped_and_public_window_filtered(api, ready, course)
     assert api.request("GET", "/sessions/active", None).json() == []
 
 
-@pytest.mark.parametrize("latitude,status,risk", [(1.3483, "approved", 0.2),
-                                                 (1.34965, "approved", 0.35),
-                                                 (1.351, "rejected", 0.35)])
+# Registered device (0.1); about 150 m is outside the 100 m fence (review), about 300 m beyond twice it.
+@pytest.mark.parametrize("latitude,status,risk", [(1.3483, "approved", 0.1),
+                                                 (1.34965, "flagged", 0.25),
+                                                 (1.351, "rejected", 0.25)])
 def test_checkin_geofence_stored_with_audit(api, ready, latitude, status, risk):
+    api.request("POST", "/devices/register", "student", json={"device_fingerprint": "test-device"})
     response = api.request("POST", "/checkins/", "student", json=checkin_payload(ready, latitude=latitude))
     assert response.status_code == 201, response.text
     result = response.json()
@@ -350,8 +352,9 @@ def test_checkin_coordinate_validation(api, ready, changes):
     assert api.request("POST", "/checkins/", "student", json=checkin_payload(ready, **changes)).status_code == 422
 
 
-@pytest.mark.parametrize("multiple,status", [(1, "approved"), (0.999, "approved"), (0.5, "approved"), (0.499, "rejected")])
+@pytest.mark.parametrize("multiple,status", [(1, "approved"), (0.999, "flagged"), (0.5, "flagged"), (0.499, "rejected")])
 def test_exact_geofence_boundaries(api, ready, multiple, status):
+    api.request("POST", "/devices/register", "student", json={"device_fingerprint": "test-device"})
     distance = haversine_distance(1.3483, 103.6831, 1.3493, 103.6831)
     with api.database() as database:
         database.get(Session, ready["id"]).geofence_radius_meters = distance * multiple

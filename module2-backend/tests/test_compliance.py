@@ -3,6 +3,7 @@
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
@@ -51,7 +52,7 @@ def test_weighted_risk_uses_documented_bands_and_critical_rejection():
         distance=0, radius=100, location_accuracy=5,
         require_liveness=True, require_face=True,
         liveness_score=.8, liveness_passed=True, face_score=.8, face_passed=True,
-        known_device=False, trusted_device=False, local_network=True, threshold=.5,
+        known_device=True, trusted_device=False, local_network=True, threshold=.5,
     )
     critical = assess_risk(
         distance=10, radius=100, location_accuracy=5,
@@ -62,6 +63,37 @@ def test_weighted_risk_uses_documented_bands_and_critical_rejection():
     assert medium.status == "approved"
     assert 0 <= medium.score < .5
     assert critical.status == "rejected"
+
+
+def _plain_risk(**changes):
+    values = dict(distance=0, radius=100, location_accuracy=10, require_liveness=False, require_face=False,
+                  liveness_score=None, liveness_passed=None, face_score=None, face_passed=None,
+                  known_device=True, trusted_device=False, local_network=True, threshold=.5)
+    return assess_risk(**{**values, **changes})
+
+
+@pytest.mark.parametrize("distance,status", [(100, "approved"), (150, "flagged"), (199, "flagged"), (201, "rejected")])
+def test_outside_geofence_is_reviewed_and_beyond_twice_is_rejected(distance, status):
+    decision = _plain_risk(distance=distance)
+    assert decision.status == status
+    assert ("geo_out_of_bounds" in {f["type"] for f in decision.factors}) is (distance > 100)
+
+
+def test_unknown_and_shared_devices_flag_low_scores():
+    assert _plain_risk().status == "approved"
+    unknown = _plain_risk(known_device=False)
+    assert unknown.status == "flagged" and "device_unknown" in {f["type"] for f in unknown.factors}
+    shared = _plain_risk(known_device=False, shared_device=True)
+    types = {f["type"] for f in shared.factors}
+    assert shared.status == "flagged" and "device_shared" in types and "device_unknown" not in types
+
+
+def test_requested_but_missing_liveness_is_maximum_liveness_risk():
+    skipped = _plain_risk(liveness_requested=True)
+    assert skipped.contributions["liveness"] == .25
+    assert _plain_risk(liveness_requested=False).contributions["liveness"] == 0
+    with pytest.raises(ValueError):
+        _plain_risk(liveness_requested=True, liveness_score=.9)
 
 
 def test_retention_deletes_checkins_anonymises_users_and_keeps_audit():

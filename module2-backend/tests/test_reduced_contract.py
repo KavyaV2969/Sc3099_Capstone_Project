@@ -57,7 +57,8 @@ def test_optional_liveness_only_evaluates_usable_consented_evidence(api, ready, 
     assert calls == ([image] if evaluated else [])
     assert response.json()["liveness_passed"] is (True if evaluated else None)
     assert response.json()["liveness_score"] == (.8 if evaluated else None)
-    assert response.json()["risk_score"] == (.25 if evaluated else .2)
+    # Requested-but-unevaluated liveness counts as maximum liveness risk (0.25), not zero.
+    assert response.json()["risk_score"] == (.25 if evaluated else .45 if live else .2)
     with api.database() as db:
         assert db.get(User, api.users["student"].id).geolocation_consent is False
 
@@ -87,7 +88,8 @@ def test_keyless_inventory_key_omission_and_null_removal(api, ready):
         assert db.get(Device, did).public_key is None
     assert api.request("POST", f"/devices/{did}/challenge", "student", json=proposed).status_code == 400
     unsigned = api.request("POST", "/checkins/", "student", json=proposed)
-    assert unsigned.status_code == 201 and unsigned.json()["risk_score"] == .2
+    # Still registered, so known (0.5 device risk); only proof can make it trusted.
+    assert unsigned.status_code == 201 and unsigned.json()["risk_score"] == .1
     assert api.request("PATCH", f"/devices/{did}", "admin", json={"is_active":False}).status_code == 200
     assert api.request("POST", "/devices/", "student", json=payload).status_code == 403
 

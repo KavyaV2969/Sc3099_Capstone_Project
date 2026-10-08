@@ -33,7 +33,16 @@ def assess_risk(
     face_score: float | None, face_passed: bool | None,
     known_device: bool, trusted_device: bool, local_network: bool,
     threshold: float, network_risk: float | None = None, impossible_travel: bool = False,
+    liveness_requested: bool = False, shared_device: bool = False,
 ) -> RiskDecision:
+    """Score a check-in.
+
+    ``require_liveness`` means liveness evidence was evaluated; ``liveness_requested``
+    means the session asked for it. Requested-but-missing evidence is maximum
+    liveness risk, as in the recommended integration guide, never a free pass.
+    Review reasons (outside geofence, unknown/shared device, impossible travel)
+    flag an otherwise approved check-in without adding a rejection rule.
+    """
     if not all(isfinite(v) for v in (distance, radius, threshold)) or (
         distance < 0 or radius <= 0 or not 0 <= threshold <= 1
         or (location_accuracy is not None and (not isfinite(location_accuracy) or location_accuracy < 0))
@@ -44,8 +53,14 @@ def assess_risk(
         raise ValueError("invalid network signal")
     if location_accuracy is None or location_accuracy > radius:
         geo_risk = min(1.0, geo_risk + .25)
+    if liveness_requested and not require_liveness:
+        if liveness_score is not None or liveness_passed is not None:
+            raise ValueError("skipped liveness must have no evidence")
+        liveness_risk = 1.0
+    else:
+        liveness_risk = _biometric_risk(require_liveness, liveness_score, liveness_passed, .6)
     signals = {
-        "liveness": _biometric_risk(require_liveness, liveness_score, liveness_passed, .6),
+        "liveness": liveness_risk,
         "face_match": _biometric_risk(require_face, face_score, face_passed, .7),
         "device": 0.0 if known_device and trusted_device else .5 if known_device else 1.0,
         "network": network_risk if network_risk is not None else 0.0 if local_network else .2,
@@ -65,9 +80,16 @@ def assess_risk(
     ]
     score = round(min(1.0, sum(contributions.values())), 4)
     status = "rejected" if any(critical.values()) or score >= .7 else "flagged" if score >= threshold else "approved"
-    if impossible_travel:
-        factors.append({"type": "impossible_travel", "severity": "high", "critical": False,
-                        "risk": 1.0, "weight": 0.0, "contribution": 0.0})
-        if status == "approved":
-            status = "flagged"
+    reasons = [
+        ("geo_out_of_bounds", distance > radius, "high"),
+        ("device_unknown", not known_device and not shared_device, "medium"),
+        ("device_shared", shared_device, "high"),
+        ("impossible_travel", impossible_travel, "high"),
+    ]
+    for kind, present, severity in reasons:
+        if present:
+            factors.append({"type": kind, "severity": severity, "critical": False,
+                            "risk": 1.0, "weight": 0.0, "contribution": 0.0})
+            if status == "approved":
+                status = "flagged"
     return RiskDecision(score, status, factors, contributions)

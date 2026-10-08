@@ -28,8 +28,9 @@ def test_network_hint_uses_words_and_preserves_private_ip(api, ready, agent, exp
     assert result.status_code == 201 and result.json()["risk_score"] == expected
 
 
+# Unknown accuracy no longer disables inference; it simply contributes no slack.
 @pytest.mark.parametrize("displacement,elapsed,accuracy,flagged", [(.005,1,10,False),(.02,5,10,True),
-    (.02,60,10,False),(.02,-1,10,True),(.02,5,2000,False),(.02,5,None,False)])
+    (.02,60,10,False),(.02,-1,10,True),(.02,5,2000,False),(.02,5,None,True)])
 def test_impossible_travel_boundaries_flag_without_rejection(api, ready, displacement, elapsed, accuracy, flagged):
     first = api.request("POST", "/checkins/", "student", json=checkin_payload(ready))
     assert first.status_code == 201
@@ -43,7 +44,8 @@ def test_impossible_travel_boundaries_flag_without_rejection(api, ready, displac
     assert api.request("PATCH", f"/sessions/{next_session['id']}", json={"status":"active"}).status_code == 200
     result = api.request("POST", "/checkins/", "student", json=checkin_payload(next_session))
     assert result.status_code == 201, result.text
-    assert (result.json()["status"] == "flagged") is flagged
+    # Status alone is not specific: unsigned devices are also flagged for review.
+    assert ("impossible_travel" in {f["type"] for f in result.json()["risk_factors"]}) is flagged
     assert result.json()["status"] != "rejected"
 
 
@@ -290,12 +292,26 @@ def test_valid_device_proof_earns_trust_and_is_consumed(api, ready, trusted, exp
     assert get_redis_client().get("device-proof:" + payload["device_challenge_id"]) is None
 
 
-def test_unsigned_registered_trusted_device_remains_unknown(api, ready):
+def test_unsigned_registered_trusted_device_is_known_but_not_trusted(api, ready):
     did = register_device(api)
     api.request("PATCH", f"/devices/{did}", "admin", json={"is_trusted": True})
     result = api.request("POST", "/checkins/", "student", json=checkin_payload(ready))
     assert result.status_code == 201, result.text
-    assert result.json()["risk_score"] == .2
+    # Registration makes the device known (0.5 risk); trust still needs key-possession proof.
+    assert result.json()["risk_score"] == .1 and result.json()["status"] == "approved"
+    assert "device_unknown" not in {f["type"] for f in result.json()["risk_factors"]}
+
+
+def test_unregistered_and_shared_devices_are_flagged_for_review(api, ready):
+    result = api.request("POST", "/checkins/", "student", json=checkin_payload(ready, device_fingerprint="never-registered"))
+    assert result.status_code == 201 and result.json()["status"] == "flagged"
+    assert "device_unknown" in {f["type"] for f in result.json()["risk_factors"]}
+    other = api.request("POST", "/sessions/", json=session_payload({"id": ready["course_id"]})).json()
+    api.request("PATCH", f"/sessions/{other['id']}", json={"status": "active"})
+    api.request("POST", "/devices/register", "other_student", json={"device_fingerprint": "friends-phone"})
+    shared = api.request("POST", "/checkins/", "student", json=checkin_payload(other, device_fingerprint="friends-phone"))
+    assert shared.status_code == 201 and shared.json()["status"] == "flagged"
+    assert "device_shared" in {f["type"] for f in shared.json()["risk_factors"]}
 
 
 @pytest.mark.parametrize("attack", ["payload", "signature", "expired", "revoked", "key_changed", "foreign", "session"])
@@ -345,6 +361,7 @@ def test_rsa_proof_and_weak_or_unsupported_keys(api, ready):
 
 
 def test_approved_rates_and_roster_survive_withdrawal(api, ready):
+    register_device(api)  # A known device keeps this low-risk check-in approved.
     result = api.request("POST", "/checkins/", "student", json=checkin_payload(ready))
     assert result.status_code == 201
     added = api.request("POST", "/enrollments/", json={"course_id": ready["course_id"],
@@ -379,6 +396,7 @@ def test_explicit_session_exports_retained_attendance_outside_default_dates(api,
         "checkin_opens_at": (now - timedelta(minutes=1)).isoformat(),
         "checkin_closes_at": max(start + timedelta(minutes=30), now + timedelta(minutes=30)).isoformat()})
     assert response.status_code == 200
+    register_device(api)  # Known device: the low-risk check-in is approved.
     assert api.request("POST", "/checkins/", "student", json=checkin_payload(ready)).status_code == 201
     stats = api.request("GET", f"/stats/sessions/{ready['id']}").json()
     exported = api.request("GET", f"/export/session/{ready['id']}?format=json").json()
@@ -435,6 +453,8 @@ def test_admin_reactivation_preserves_roster_and_counts_approved_attendance(api,
         None if roster_state == "legacy" else [api.users["student"].id])
     assert roster == expected
     if roster_state == "active":
+        assert api.request("POST", "/devices/register", "other_student",
+                           json={"device_fingerprint": "test-device"}).status_code == 201
         response = api.request("POST", "/checkins/", "other_student", json=checkin_payload(session))
         assert response.status_code == 201 and response.json()["status"] == "approved"
         stats = api.request("GET", f"/stats/sessions/{session['id']}").json()

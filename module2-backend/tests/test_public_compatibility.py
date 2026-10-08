@@ -80,6 +80,8 @@ def test_public_analytics_aliases_preserve_instructor_approved_attendance(api, r
 
 
 def test_public_export_aliases_preserve_existing_records_and_roster_summary(api, ready):
+    assert api.request("POST", "/devices/register", "student",
+                       json={"device_fingerprint": "test-device"}).status_code == 201
     assert api.request("POST", "/checkins/", "student", json=checkin_payload(ready)).status_code == 201
     result = api.request("GET", f"/export/session/{ready['id']}?format=json")
     assert result.status_code == 200

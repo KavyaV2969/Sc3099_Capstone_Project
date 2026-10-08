@@ -27,6 +27,7 @@ from app.services.devices import verify_proof, consume_proof
 from app.utils.geolocation import haversine_distance, ip_is_in_singapore, is_in_singapore
 
 router = APIRouter(prefix="/checkins", tags=["checkins"])
+REVIEW_REASONS = {"geo_out_of_bounds", "device_unknown", "device_shared", "impossible_travel"}
 
 
 def _reject(database: Session, request: Request, user_id: str, session_id: str, code: int, detail: str,
@@ -178,15 +179,21 @@ def _finalize(policy: VerificationPolicy, biometric: tuple, payload: CheckinCrea
     live_passed, live_score, face_passed, face_score = biometric
     network_hint = bool(re.search(r"\b(?:vpn|proxy|tunnel|tor)\b",
                        request.headers.get("user-agent", ""), re.IGNORECASE))
+    # Any retained, non-rejected attempt is evidence of where the student claimed to be.
     previous = database.scalar(select(Checkin).where(Checkin.student_id == user_id,
-        Checkin.status == "approved", Checkin.scheduled_deletion_at > utc_now())
+        Checkin.status != "rejected", Checkin.scheduled_deletion_at > utc_now())
         .order_by(Checkin.checked_in_at.desc()).limit(1))
     travel = False
-    if previous and previous.location_accuracy_meters is not None and payload.location_accuracy_meters is not None:
+    if previous:
         displacement = haversine_distance(payload.latitude, payload.longitude, previous.latitude, previous.longitude)
         elapsed = (utc_now() - as_utc(previous.checked_in_at)).total_seconds()
-        certain_distance = max(0, displacement - previous.location_accuracy_meters - payload.location_accuracy_meters)
+        # Unknown accuracy contributes no slack; known radii are subtracted as before.
+        slack = (previous.location_accuracy_meters or 0) + (payload.location_accuracy_meters or 0)
+        certain_distance = max(0, displacement - slack)
         travel = displacement >= 1000 and (elapsed <= 0 or certain_distance / elapsed > 100)
+    # Fingerprints are globally unique: one registered to another account indicates proxy use.
+    shared_device = device is None and database.scalar(select(Device.id).where(
+        Device.device_fingerprint == payload.device_fingerprint, Device.user_id != user_id)) is not None
     try:
         decision = assess_risk(
             distance=distance, radius=session.geofence_radius_meters,
@@ -194,9 +201,11 @@ def _finalize(policy: VerificationPolicy, biometric: tuple, payload: CheckinCrea
             liveness_score=live_score, liveness_passed=live_passed,
             face_score=face_score, face_passed=face_passed,
             require_liveness=policy.require_liveness, require_face=policy.require_face,
-            known_device=proof is not None, trusted_device=bool(proof and device.is_trusted),
+            # A registered active device is known; trust still requires single-use key proof.
+            known_device=device is not None, trusted_device=bool(proof and device.is_trusted),
             local_network=True, network_risk=.8 if network_hint else 0,
-            impossible_travel=travel, threshold=session.risk_threshold)
+            impossible_travel=travel, threshold=session.risk_threshold,
+            liveness_requested=session.require_liveness_check, shared_device=shared_device)
     except ValueError:
         _reject(database, request, user_id, session_id, 503, "verification evidence unavailable")
     now = utc_now()
@@ -231,7 +240,7 @@ def _finalize(policy: VerificationPolicy, biometric: tuple, payload: CheckinCrea
                              "network_detection": "user_agent_hint" if network_hint else "unavailable",
                              "device_proof": bool(proof),
                              "reason": [factor["type"] for factor in decision.factors
-                                        if factor["critical"] or factor["type"] == "impossible_travel"],
+                                        if factor["critical"] or factor["type"] in REVIEW_REASONS],
                              "reviewer_id": None},
                     success=decision.status != "rejected")
     database.commit()

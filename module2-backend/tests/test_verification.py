@@ -57,6 +57,7 @@ def enabled(api, ready, live=True, face=True):
 @pytest.mark.parametrize("live,face", [(False, False), (True, False), (False, True), (True, True)])
 def test_flags_control_calls_and_approved_evidence(api, ready, face_http, live, face):
     enabled(api, ready, live, face)
+    api.request("POST", "/devices/register", "student", json={"device_fingerprint": "test-device"})
     result = api.request("POST", "/checkins/", "student", json=checkin_payload(
         ready, liveness_challenge_response="private-image")).json()
     assert result["status"] == "approved"
@@ -145,6 +146,7 @@ def test_transport_errors_are_sanitized(api, ready, face_http, error, caplog):
                                              ("/face/verify", .7, True), ("/face/verify", .6999, False)])
 def test_biometric_boundaries_and_rejected_records(api, ready, face_http, path, score, passed):
     enabled(api, ready, path == "/liveness/check", path == "/face/verify")
+    api.request("POST", "/devices/register", "student", json={"device_fingerprint": "test-device"})
     key = "liveness" if path == "/liveness/check" else "match"
     face_http[1][path] = {**face_http[1][path], key + "_score": score, key + "_passed": passed}
     response = api.request("POST", "/checkins/", "student", json=checkin_payload(ready, liveness_challenge_response="image"))
@@ -183,11 +185,11 @@ def risk(**changes):
     return assess_risk(**(values | changes))
 
 
-@pytest.mark.parametrize("threshold,status", [(0, "flagged"), (.2, "flagged"), (.2001, "approved"), (.5, "approved"), (1, "approved")])
+@pytest.mark.parametrize("threshold,status", [(0, "flagged"), (.1, "flagged"), (.1001, "approved"), (.5, "approved"), (1, "approved")])
 def test_thresholds_apply_without_optional_biometrics(threshold, status):
-    decision = risk(threshold=threshold)
-    assert decision.score == .2 and decision.status == status
-    assert decision.factors[0]["risk"] == 1 and decision.factors[0]["contribution"] == .2
+    decision = risk(threshold=threshold, known_device=True)  # Registered device: no review reason.
+    assert decision.score == .1 and decision.status == status
+    assert decision.factors[0]["risk"] == .5 and decision.factors[0]["contribution"] == .1
 
 
 def test_weights_accuracy_device_and_geofence_boundaries():
@@ -196,7 +198,8 @@ def test_weights_accuracy_device_and_geofence_boundaries():
     assert risk(known_device=True).score == .1
     assert risk(known_device=True, trusted_device=True).score == 0
     assert risk(trusted_device=True).score == .2  # Trust without ownership/existence is insufficient.
-    assert risk(distance=200).status == "approved"
+    assert risk(distance=100, known_device=True).status == "approved"
+    assert risk(distance=200, known_device=True).status == "flagged"  # Outside the fence: review.
     assert risk(distance=200.01, threshold=1).status == "rejected"
     assert risk(distance=.1, radius=.2, location_accuracy=0).score == .275
     decision = risk(require_liveness=True, require_face=True, liveness_score=.8, liveness_passed=True,
@@ -246,7 +249,7 @@ def test_configured_defaults_and_explicit_zero(api, monkeypatch):
 
 
 @pytest.mark.parametrize("kind", ["unknown", "known", "trusted", "inactive", "other_owner"])
-def test_unsigned_api_device_states_all_use_unknown_device_risk(api, ready, kind):
+def test_unsigned_api_device_states_score_registration_but_not_trust(api, ready, kind):
     if kind != "unknown":
         with api.database() as db:
             owner = api.users["other_student" if kind == "other_owner" else "student"].id
@@ -259,5 +262,9 @@ def test_unsigned_api_device_states_all_use_unknown_device_risk(api, ready, kind
             db.commit()
     response = api.request("POST", "/checkins/", "student", json=checkin_payload(ready, location_accuracy_meters=10000))
     assert response.status_code == 201 and response.json()["status"] == "flagged"
-    expected = .0375 + .2  # Inventory matching does not establish key possession.
+    # An owned, active registration is known (0.5); trust still requires key-possession proof.
+    expected = .0375 + (.1 if kind in {"known", "trusted"} else .2)
     assert response.json()["risk_score"] == pytest.approx(expected)
+    reason = {"unknown": "device_unknown", "inactive": "device_unknown", "other_owner": "device_shared"}.get(kind)
+    types = {f["type"] for f in response.json()["risk_factors"]}
+    assert ({"device_unknown", "device_shared"} & types) == ({reason} if reason else set())
