@@ -2,7 +2,7 @@
 
 from collections.abc import Generator
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import get_settings
@@ -30,6 +30,16 @@ def get_db() -> Generator[Session, None, None]:
         raise
     finally:
         database.close()
+
+
+def database_is_reachable() -> bool:
+    """Cheap liveness probe: one pooled round trip, no catalog inspection."""
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+        return True
+    except Exception:
+        return False
 
 
 def database_is_healthy() -> bool:

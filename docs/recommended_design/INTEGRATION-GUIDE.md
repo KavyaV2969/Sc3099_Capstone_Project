@@ -456,5 +456,5 @@ The frontend build-time base is `http://localhost:8000/api/v1`.
 and `checkin_success_total`; success means approved attendance at submission.
 Request IDs and validated trace-context propagation are implemented. Full OTLP
 tracing is deferred; an unused OTLP environment variable is not instrumentation.
-Backend `/health` checks database/schema/Redis, not biometric capabilities.
+Backend `/health` checks database/Redis reachability; `/health/schema` verifies the schema.
 A working external face service is still required to close real integration.

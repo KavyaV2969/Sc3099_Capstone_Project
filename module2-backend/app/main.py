@@ -13,7 +13,7 @@ from starlette.concurrency import run_in_threadpool
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 
 from app.config import get_settings
-from app.db import database_readiness, get_db
+from app.db import database_is_reachable, database_readiness, get_db
 from app.audit import write_audit_log
 from app.middleware import RequestMiddleware
 from app.metrics import registry
@@ -29,11 +29,19 @@ logging.getLogger("httpcore").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 
+# Result of the last full frozen-schema verification. It is reported by /health but
+# never recomputed there: catalog inspection is too slow for a liveness probe.
+schema_status = "unchecked"
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    global schema_status
     stop = asyncio.Event()
     worker = None
     readiness = await asyncio.to_thread(database_readiness) if settings.retention_cleanup_enabled else None
+    if readiness:
+        schema_status = readiness.schema
     if readiness and not readiness.healthy:
         logger.error("Retention startup blocked by database readiness: %s", readiness.errors)
     if settings.retention_cleanup_enabled and readiness.healthy:
@@ -129,12 +137,22 @@ def metrics():
 
 @app.get("/health", tags=["health"])
 def health_check():
-    readiness = database_readiness()
-    database = "healthy" if readiness.healthy else "unhealthy"
-    if not readiness.healthy:
-        logger.warning("Database readiness failed: %s", readiness.errors)
+    """Liveness: the API can reach PostgreSQL and Redis. Schema drift is reported, not fatal."""
+    database = "healthy" if database_is_reachable() else "unhealthy"
     redis = "healthy" if redis_is_healthy() else "unhealthy"
-    body = {"service": "backend", "api": "healthy", "database": database, "redis": redis, "schema": readiness.schema}
+    body = {"service": "backend", "api": "healthy", "database": database, "redis": redis, "schema": schema_status}
     if database == "healthy" and redis == "healthy":
         return {"status": "healthy", **body}
     return JSONResponse(status_code=503, content={"status": "unhealthy", **body})
+
+
+@app.get("/health/schema", tags=["health"])
+def schema_health_check():
+    """Operator readiness: full frozen-schema/ORM verification; details stay in server logs."""
+    global schema_status
+    readiness = database_readiness()
+    schema_status = readiness.schema
+    if not readiness.healthy:
+        logger.warning("Database schema verification failed: %s", readiness.errors)
+        return JSONResponse(status_code=503, content={"status": "unhealthy", "schema": readiness.schema})
+    return {"status": "healthy", "schema": readiness.schema}

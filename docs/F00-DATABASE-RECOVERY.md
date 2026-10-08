@@ -113,9 +113,9 @@ Keep traffic stopped until post-commit schema verification and a normal
 
 ## Readiness and device compatibility
 
-`GET /health` returns HTTP 200 only when database connectivity, the frozen canonical
-schema, current ORM metadata and Redis all pass. It preserves existing fields and
-adds `schema: healthy|incompatible|unknown`. Failures return 503 and generic public
+`GET /health/schema` returns HTTP 200 only when database connectivity, the frozen canonical
+schema and current ORM metadata pass. `GET /health` is liveness only (database and Redis
+reachability) and reports the startup verdict as `schema: healthy|incompatible|unknown|unchecked`. Failures return 503 and generic public
 state; server logs contain schema component diagnostics without raw SQL/credentials.
 Each request performs read-only verification with bounded timeouts and no cached
 healthy result. Invalid/unvalidated constraints/indexes and unknown revisions fail.

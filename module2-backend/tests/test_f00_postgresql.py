@@ -106,8 +106,7 @@ def test_readiness_catches_structural_drift_with_working_connectivity(canonical,
     readiness = inspect_readiness(canonical)
     assert readiness.connected and not readiness.healthy
     monkeypatch.setattr(main, "database_readiness", lambda: inspect_readiness(canonical))
-    monkeypatch.setattr(main, "redis_is_healthy", lambda: True)
-    assert TestClient(main.app).get("/health").status_code == 503
+    assert TestClient(main.app).get("/health/schema").status_code == 503
 
 
 @pytest.mark.parametrize("problem", ["long", "duplicate"])

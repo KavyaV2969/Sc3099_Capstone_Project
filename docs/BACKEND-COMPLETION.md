@@ -282,10 +282,10 @@ not a live territorial dataset.
 
 ## Deployment, operators and observability
 
-Copy the root `.env.example` to private ignored `.env`, generate fresh secrets
-and set separate `MIGRATION_DATABASE_URL`, `BACKEND_DATABASE_URL` and optionally
-`DASHBOARD_DATABASE_URL`. Example JWT placeholders are intentionally too short
-to start the application. URLs inside Compose use `postgres:5432`; host tooling
+Compose supplies local-development defaults so a clean clone starts with
+`docker compose up -d`. For shared deployments copy the root `.env.example` to
+private ignored `.env`, generate fresh secrets and set separate
+`MIGRATION_DATABASE_URL`, `BACKEND_DATABASE_URL` and `DASHBOARD_DATABASE_URL`. URLs inside Compose use `postgres:5432`; host tooling
 can use `127.0.0.1:5434` (explicit IPv4 avoids Windows localhost connection
 delays with IPv4-only published ports). Redis publishes `127.0.0.1:6380`.
 
@@ -306,8 +306,9 @@ recreation; do not reset the integration database or its data volumes.
 docker compose up -d --build postgres redis backend
 ```
 
-Backend `/health` checks DB, exact frozen schema/ORM and Redis. It does not
-certify face capabilities. Configure `FACE_SERVICE_URL` to a functioning
+Backend `/health` is liveness only (DB `SELECT 1`, Redis ping) and reports the startup
+schema verdict without failing on drift; `/health/schema` performs the exact frozen
+schema/ORM check and returns 503 on drift. Neither certifies face capabilities. Configure `FACE_SERVICE_URL` to a functioning
 implementation. Enabled biometric policies remain enabled when it is missing.
 The production image includes canonical/legacy migrations, contracts and
 recovery tooling; run isolated backup/restore and the strict verifier before

@@ -14,9 +14,10 @@ preserved; successful mocks do not certify real face-service interoperability.
 
 ## Run and configure
 
-From the repository root, copy `.env.example` to private ignored `.env` and
-replace the deliberately invalid secret placeholder. Supply separate operator,
-application and optional read-only dashboard database URLs. PostgreSQL password
+`docker compose up -d` works from a clean clone: Compose supplies local-development
+defaults for every credential. For any shared deployment, copy `.env.example` to
+private ignored `.env` and replace every password and the JWT secret (separate
+operator, application and read-only dashboard database URLs). PostgreSQL password
 changes require explicit role rotation for an existing database; changing the
 container environment alone does not rotate the stored password.
 
@@ -36,8 +37,10 @@ The production image includes the complete recovery/verification source set.
 The current canonical head is `20260929_0009`. Legacy recovery first verifies
 the historical `20260928_0006` destination, then applies the normal forward
 completion migrations. See the [recovery runbook](../docs/F00-DATABASE-RECOVERY.md).
-`/health` requires database connectivity, exact frozen schema/ORM, enabled audit
-integrity objects and Redis. It does not check biometric capability.
+`/health` is a fast liveness probe (database `SELECT 1` and Redis ping); it reports
+the startup schema verdict in `schema` but never fails on drift. `/health/schema`
+runs the full frozen schema/ORM/audit-trigger verification and returns 503 on drift.
+Neither checks biometric capability.
 
 ## Implemented API and behavior
 
