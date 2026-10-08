@@ -141,7 +141,7 @@ def test_flagged_envelope_pagination_filters_and_ta_removal(api, ready):
                 scheduled_deletion_at=utc_now()+timedelta(days=30))
             db.add(row); rows.append(row)
         db.add(CourseTA(course_id=source.course_id,ta_id=api.users['ta'].id)); db.commit()
-        other_id, extra_id = other.id, extra.id
+        other_id, extra_id, extra_flagged_id = other.id, extra.id, rows[2].id
     queue=api.request("GET", "/checkins/flagged?limit=1", "other_instructor").json()
     assert queue['total']==3 and queue['limit']==1 and queue['offset']==0 and len(queue['items'])==1
     next_page=api.request("GET", "/checkins/flagged?limit=1&offset=1", "other_instructor").json()
@@ -149,14 +149,17 @@ def test_flagged_envelope_pagination_filters_and_ta_removal(api, ready):
     assert api.request("GET", "/checkins/flagged?offset=3", "admin").json()['items']==[]
     assert api.request("GET", f"/checkins/flagged?course_id={other_id}").json()['total']==1
     assert api.request("GET", f"/checkins/flagged?session_id={extra_id}").json()['total']==1
-    assert api.request("GET", "/checkins/flagged", "ta").json()['total']==2
-    assert api.request("GET", f"/checkins/flagged?course_id={other_id}", "ta").json()['total']==0
-    assert api.request("GET", f"/checkins/session/{extra_id}", "ta").status_code==403
+    # TAs read every course's queue and check-ins; reviews remain assignment-scoped.
+    assert api.request("GET", "/checkins/flagged", "ta").json()['total']==3
+    assert api.request("GET", f"/checkins/flagged?course_id={other_id}", "ta").json()['total']==1
+    assert api.request("GET", f"/checkins/session/{extra_id}", "ta").status_code==200
+    assert api.request("POST", f"/checkins/{extra_flagged_id}/review", "ta",
+                       json={"status": "approved"}).status_code==403
     assert api.request("GET", "/checkins/flagged", "student").status_code==403
     with api.database() as db:
         db.delete(db.get(CourseTA,(ready['course_id'],api.users['ta'].id))); db.commit()
-    assert api.request("GET", "/checkins/flagged", "ta").json()['total']==0
-    assert api.request("GET", f"/enrollments/course/{ready['course_id']}", "ta").status_code==403
+    assert api.request("GET", "/checkins/flagged", "ta").json()['total']==3
+    assert api.request("GET", f"/enrollments/course/{ready['course_id']}", "ta").status_code==200
 
 
 def test_public_catalogue_more_than_fifty_courses_orders_newest_and_filters(api, course):

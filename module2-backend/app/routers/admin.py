@@ -1,6 +1,6 @@
 """Administrative user, session, and enrollment operations."""
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import UUID4
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -9,13 +9,14 @@ from sqlalchemy.orm import Session
 from app.audit import write_audit_log
 from app.db import get_db
 from app.dependencies import require_roles
-from app.models import User
+from app.models import CourseTA, User
 from app.schemas import (
     AdminActionResponse, AdminSessionStatusResponse, AdminSessionStatusUpdate,
     BulkUserCreate, BulkUserError, BulkUserItem, BulkUserResponse, EnrollmentCreate,
     EnrollmentResponse, UserRole,
 )
 from app.security import hash_password
+from app.services.access import get_course
 from app.services.enrollments import create_enrollment, capture_roster, include_in_active_rosters
 
 router = APIRouter(prefix="/admin", tags=["administration"])
@@ -154,3 +155,43 @@ def admin_create_enrollment(
     database.refresh(enrollment)
     return enrollment
 
+
+@router.put("/courses/{course_id}/tas/{ta_id}")
+def assign_course_ta(
+    course_id: UUID4,
+    ta_id: UUID4,
+    request: Request,
+    database: Session = Depends(get_db),
+    admin: User = Depends(admin_only),
+):
+    """Idempotently grant a TA the course's write-scoped duties (reviewing check-ins)."""
+    get_course(database, str(course_id))
+    ta = database.get(User, str(ta_id))
+    if ta is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user not found")
+    if ta.role != "ta" or not ta.is_active:
+        raise HTTPException(status_code=400, detail="an active TA is required")
+    if database.get(CourseTA, (str(course_id), ta.id)) is None:
+        database.add(CourseTA(course_id=str(course_id), ta_id=ta.id))
+        write_audit_log(database, request, action="course_ta_assigned", user_id=admin.id,
+                        resource_type="course", resource_id=str(course_id), details={"ta_id": ta.id})
+        database.commit()
+    return {"course_id": str(course_id), "ta_id": ta.id, "message": "TA assigned to course"}
+
+
+@router.delete("/courses/{course_id}/tas/{ta_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_course_ta(
+    course_id: UUID4,
+    ta_id: UUID4,
+    request: Request,
+    database: Session = Depends(get_db),
+    admin: User = Depends(admin_only),
+):
+    assignment = database.get(CourseTA, (str(course_id), str(ta_id)))
+    if assignment is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="TA assignment not found")
+    database.delete(assignment)
+    write_audit_log(database, request, action="course_ta_removed", user_id=admin.id,
+                    resource_type="course", resource_id=str(course_id), details={"ta_id": str(ta_id)})
+    database.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

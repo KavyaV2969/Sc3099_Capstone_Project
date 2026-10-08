@@ -179,9 +179,9 @@ def test_enrollment_role_ownership_and_missing_users(api, course):
     assert api.request("GET", f"/enrollments/course/{course['id']}", "other_instructor").status_code == 200
 
 
-def test_ta_access_requires_course_assignment(api, course, session, enrollment):
+def test_ta_reads_rosters_but_assignment_scopes_sessions_and_writes(api, course, session, enrollment):
     path = f"/enrollments/course/{course['id']}"
-    assert api.request("GET", path, "ta").status_code == 403
+    assert api.request("GET", path, "ta").status_code == 200  # TA read scope is global.
     assert api.request("GET", "/sessions/my-sessions", "ta").json() == []
     with api.database() as database:
         database.add(CourseTA(course_id=course["id"], ta_id=api.users["ta"].id))

@@ -318,11 +318,8 @@ def flagged_checkins(course_id: UUID4 | None = None, session_id: UUID4 | None = 
                      database: Session = Depends(get_db),
                      user: User = Depends(require_roles(UserRole.INSTRUCTOR, UserRole.TA, UserRole.ADMIN))):
     query = checkin_query().where(Checkin.status.in_(("flagged", "appealed")))
-    if user.role == "instructor":
+    if user.role != "admin":
         query = query.where(Course.id.in_(accessible_course_ids(user, read_only=True)))
-    elif user.role == "ta":
-        from app.models import CourseTA
-        query = query.join(CourseTA, CourseTA.course_id == Course.id).where(CourseTA.ta_id == user.id)
     if course_id: query = query.where(Course.id == str(course_id))
     if session_id: query = query.where(Checkin.session_id == str(session_id))
     total = database.scalar(select(func.count()).select_from(query.subquery())) or 0

@@ -44,8 +44,14 @@ def get_checkin(database: Session, checkin_id: str, *, lock: bool = False) -> Ch
     return checkin
 
 
+READ_ALL_ROLES = {"instructor", "ta"}
+
+
 def can_manage_course(database: Session, course: Course, user: User, *, allow_ta: bool = True, read_only: bool = False) -> bool:
     if user.role == "admin" or (read_only and user.role == "instructor"):
+        return True
+    # TAs read every course's attendance (API spec role table); writes stay assignment-scoped.
+    if read_only and allow_ta and user.role == "ta":
         return True
     if user.role == "instructor" and (
         course.instructor_id == user.id
@@ -63,7 +69,7 @@ def can_manage_course(database: Session, course: Course, user: User, *, allow_ta
 def accessible_course_ids(user: User, *, read_only: bool = False):
     """Read scope may include all instructor data; mutation scope stays taught courses."""
     query = select(Course.id)
-    if user.role == "admin" or (read_only and user.role == "instructor"):
+    if user.role == "admin" or (read_only and user.role in READ_ALL_ROLES):
         return query
     if user.role == "instructor":
         return query.where(or_(Course.instructor_id == user.id, exists().where(

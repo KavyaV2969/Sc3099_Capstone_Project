@@ -65,16 +65,27 @@ def test_singapore_reporting_midnight():
     assert str(business_day(datetime(2026,9,28,15,59,tzinfo=timezone.utc))) == "2026-09-28"
 
 
-def test_ta_removal_immediately_revokes_course_access(api, ready):
-    from app.models import CourseTA
-    with api.database() as db:
-        db.add(CourseTA(course_id=ready["course_id"],ta_id=api.users["ta"].id)); db.commit()
-    path = f"/stats/sessions/{ready['id']}"
-    assert api.request("GET",path,"ta").status_code == 200
-    with api.database() as db:
-        db.delete(db.get(CourseTA,(ready["course_id"],api.users["ta"].id))); db.commit()
-    assert api.request("GET",path,"ta").status_code == 403
-    assert api.request("GET",path,"admin").status_code == 200
+def test_ta_reads_globally_but_review_needs_admin_assignment(api, ready):
+    # Unregistered device: the check-in is flagged and awaits review.
+    flagged = api.request("POST", "/checkins/", "student", json=checkin_payload(ready, device_fingerprint="unknown"))
+    assert flagged.json()["status"] == "flagged"
+    review = (f"/checkins/{flagged.json()['id']}/review", {"status": "approved"})
+    assert api.request("GET", f"/stats/sessions/{ready['id']}", "ta").status_code == 200
+    assert api.request("GET", f"/checkins/session/{ready['id']}", "ta").status_code == 200
+    assert api.request("POST", review[0], "ta", json=review[1]).status_code == 403
+    assignment = f"/admin/courses/{ready['course_id']}/tas/{api.users['ta'].id}"
+    assert api.request("PUT", assignment, "ta").status_code == 403
+    assert api.request("PUT", f"/admin/courses/{ready['course_id']}/tas/{api.users['student'].id}",
+                       "admin").status_code == 400
+    assert api.request("PUT", assignment, "admin").status_code == 200
+    assert api.request("PUT", assignment, "admin").status_code == 200  # idempotent
+    assert api.request("DELETE", assignment, "admin").status_code == 204
+    assert api.request("POST", review[0], "ta", json=review[1]).status_code == 403  # removal is immediate
+    assert api.request("DELETE", assignment, "admin").status_code == 404
+    assert api.request("PUT", assignment, "admin").status_code == 200
+    reviewed = api.request("POST", review[0], "ta", json=review[1])
+    assert reviewed.status_code == 200 and reviewed.json()["status"] == "approved"
+    assert reviewed.json()["review_notes"] is None
 
 
 def test_shared_course_review_access_does_not_allow_other_session_mutation(api, ready):
