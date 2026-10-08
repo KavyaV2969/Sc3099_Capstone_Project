@@ -411,3 +411,27 @@ clarifications govern except for the explicit user-approved reductions below. Ac
 Consumer compatibility regression cases are in `tests/test_public_compatibility.py`;
 exact public results/conflicts are in the
 [public-test reconciliation report](../output/backend-public-test-reconciliation-2026-09-29.md).
+
+
+## Audit fixes — 8 October 2026 (supersede conflicting statements above)
+
+These changes realign Module 2 with the Briefing, API specification and
+recommended integration guide. Where they conflict with earlier sections, these govern.
+
+| Area | Current behavior | Superseded statement |
+|---|---|---|
+| Deployment | `docker compose up -d` works from a clean clone; Compose has local-development defaults, private `.env` overrides them | Mandatory private `.env`; invalid placeholder secret |
+| Health | `/health` = DB `SELECT 1` + Redis ping (about 5 ms), reports startup schema verdict without failing on drift; `/health/schema` = full frozen-schema check, 503 on drift | `/health` 503 on any schema drift |
+| Geofence | Outside the radius flags for review (`geo_out_of_bounds`); beyond twice the radius still rejects | Out-of-fence within 2x could be approved |
+| Device binding | An owned, active registered fingerprint is a known device (0.5 risk, contribution 0.10); trust (0.0) still requires single-use key proof. Unregistered devices flag (`device_unknown`); a fingerprint registered to another account flags (`device_shared`) | Registration alone never earned scoring; unknown devices only added risk |
+| Liveness | Session-requested liveness that is not evaluated (no image or no camera consent) is maximum liveness risk (contribution 0.25); no call is made | Zero contribution |
+| Impossible travel | Compares with the latest retained non-rejected check-in; unknown accuracy contributes no slack instead of disabling inference | Approved-only, both radii required |
+| TA role | TAs read every course's session check-ins, flagged queue, rosters and session statistics; reviews remain assignment-scoped. Admins manage assignments with `PUT`/`DELETE /admin/courses/{course_id}/tas/{ta_id}` | Assignment-scoped reads; operator SQL only |
+| XSS | Course/session codes, names and venues and device names reject HTML markup (422); appeal reasons and review notes are stored HTML-escaped | Only `full_name` protected |
+| Singapore IP rule | Offline lookup against bundled APNIC SG delegations (`app/data/singapore_ip_ranges.txt`); private/local addresses allowed; no third-party lookup, no Redis cache, no 503 path | Online `ipwho.is` lookup; 503 when unavailable |
+| Input tolerance | Unknown request fields are ignored; `require_device_binding` true/false accepted and ignored; `qr_code` accepted and ignored; appeal reason min 1 char; `review_notes`, `device_name`, `platform` optional | 422 for extras, false binding flag, nonblank QR, short appeals, missing notes/name/platform |
+
+Review reasons are risk factors with weight 0 and are listed in the outcome audit's
+`reason`. Verification: backend suite 344 passed (PostgreSQL-only cases skipped
+without `F00_POSTGRES_TEST_URL`); unchanged public suite against a fresh isolated
+stack: 81 passed, 1 supplied skip, 77/77 backend points.
