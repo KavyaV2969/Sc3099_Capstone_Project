@@ -1,6 +1,18 @@
 # SAIV Security Requirements
 
+> **Current Module 2 policy (29 September 2026):** The user approved the
+> [public contract reductions](BACKEND-COMPLETION.md#approved-public-contract-reductions).
+> They supersede earlier conflicting examples only for optional liveness/GPS
+> accuracy, per-attempt GPS permission, keyless inventory, instructor reads,
+> the public course catalogue and the flagged response envelope. Other written
+> requirements and grading/security values continue to govern.
+
 This document defines all security parameters for the SAIV system. These values are the authoritative source and must be used consistently across all modules.
+
+> **Later grading overrides:** Read
+> [`GRADING-CLARIFICATIONS.md`](GRADING-CLARIFICATIONS.md) first. It overrides the
+> login/registration rate limits, adds the graded ten-failure account lockout, and
+> makes Singapore-only check-ins mandatory.
 
 ---
 
@@ -75,14 +87,18 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 ## Rate Limiting
 
+> **Grading override:** Login and registration are each limited to **100,000 per
+> hour per IP**. General API and check-in limits remain unchanged. See
+> [`GRADING-CLARIFICATIONS.md`](GRADING-CLARIFICATIONS.md).
+
 ### Limits (Redis-based)
 
 | Endpoint Category | Limit | Window | Key |
 |-------------------|-------|--------|-----|
-| Login attempts | 60 | 1 hour | IP address |
+| Login attempts | 100,000 | 1 hour | IP address |
 | API requests | 1000 | 1 hour | User ID |
 | Check-in attempts | 10 | 1 minute | User ID |
-| Registration | 10 | 1 hour | IP address |
+| Registration | 100,000 | 1 hour | IP address |
 
 **Implementation with Redis:**
 ```python
@@ -114,6 +130,17 @@ def check_rate_limit(key: str, limit: int, window: int) -> bool:
 | Liveness threshold | 0.6 | 0.0-1.0 | Liveness check pass |
 | Face match threshold | 0.7 | 0.0-1.0 | Face verification pass |
 | Geofence radius | 100m | Configurable | Distance from venue |
+
+The persisted session risk threshold controls approval versus review below the
+critical cutoff. Risk >=0.70 always rejects. Required face evidence cannot be
+omitted or replaced with an unknown result. Bonus liveness runs only when requested
+by the session with camera consent and a nonblank image. Skipped liveness has null
+results and zero contribution without redistributing weights. Evaluated failed
+verification rejects; evaluated malformed/unavailable evidence fails safely.
+
+New course thresholds default to `RISK_SCORE_THRESHOLD`; sessions inherit their
+course threshold unless explicitly overridden, including an explicit zero.
+Existing stored thresholds are not changed by environment updates.
 
 ### Signal Weights
 
@@ -184,6 +211,17 @@ def generate_face_hash(embedding: bytes) -> str:
 |-------|------|-----------------|
 | camera_consent | Boolean | Capturing face image |
 | geolocation_consent | Boolean | Capturing GPS location |
+
+For attendance, authenticated coordinate submission grants permission for that
+attempt; the stored `geolocation_consent` preference is not changed. Camera
+consent remains necessary for face enrollment/matching and optional liveness.
+Consent updates, withdrawal, deletion and cleanup retain their existing behavior.
+
+Instructor read scope includes all student profiles, enrollment lists, attendance,
+statistics and exports, including students without enrollments. This read scope
+does not grant unrelated enrollment mutations, review rights or session ownership.
+TAs remain assignment-scoped and students retain own-data access. Only the course
+metadata catalogue is public; detail and all mutations remain authenticated.
 
 ### Data Retention
 
@@ -269,3 +307,15 @@ Verify:
 - Role-based access control
 - Rate limiting
 - Input validation
+# Backend security implementation â€” 29 September 2026
+
+The current security contract is detailed in
+[BACKEND-COMPLETION.md](BACKEND-COMPLETION.md). Device trust contributes to scoring
+only with verified single-use proof. Network hints are a user-agent heuristic,
+not proof of VPN use. Impossible travel flags review without adding a rejection
+rule. PostgreSQL enforces audit append-only behavior, and application/read-only
+roles cannot bypass it. Consent withdrawal clears enrolled face data; deletion
+requests immediately disable access and schedule anonymization after 30 days.
+Audit evidence remains under the documented indefinite-retention exception.
+New audit locations and stored check-in coordinates use four decimal places;
+geofence evaluation retains full input precision. Bcrypt defaults to cost 10.

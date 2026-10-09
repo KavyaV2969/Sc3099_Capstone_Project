@@ -6,10 +6,10 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, UUID4, field_validator, model_validator
 
-from .common import TokenType, UserRole, validate_name
+from .common import MutationModel, bounded_image, TokenType, UserRole, validate_name
 
 
-class UserRegister(BaseModel):
+class UserRegister(MutationModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=72)
     full_name: str = Field(min_length=1, max_length=255)
@@ -33,9 +33,10 @@ class UserRegister(BaseModel):
         return validate_name(value)
 
 
-class LoginRequest(BaseModel):
+class LoginRequest(MutationModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=72)
+    device_fingerprint: str | None = Field(default=None, min_length=1, max_length=64)
 
     @field_validator("email")
     @classmethod
@@ -43,11 +44,27 @@ class LoginRequest(BaseModel):
         return str(value).lower()
 
 
-class RefreshTokenRequest(BaseModel):
+class ActivationRequest(MutationModel):
+    token: str = Field(min_length=32, max_length=128)
+    password: str = Field(min_length=8, max_length=72)
+    full_name: str | None = Field(default=None, min_length=1, max_length=255)
+
+    @field_validator("password")
+    @classmethod
+    def password_bytes(cls, value: str) -> str:
+        return UserRegister.validate_password_bytes(value)
+
+    @field_validator("full_name")
+    @classmethod
+    def name(cls, value: str | None) -> str | None:
+        return validate_name(value) if value is not None else None
+
+
+class RefreshTokenRequest(MutationModel):
     refresh_token: str = Field(min_length=1)
 
 
-class UserProfileUpdate(BaseModel):
+class UserProfileUpdate(MutationModel):
     full_name: str | None = Field(default=None, min_length=1, max_length=255)
     camera_consent: bool | None = None
     geolocation_consent: bool | None = None
@@ -66,7 +83,7 @@ class UserProfileUpdate(BaseModel):
         return self
 
 
-class UserAdminUpdate(BaseModel):
+class UserAdminUpdate(MutationModel):
     full_name: str | None = Field(default=None, min_length=1, max_length=255)
     role: UserRole | None = None
     is_active: bool | None = None
@@ -135,8 +152,14 @@ class TokenPayload(BaseModel):
 
 
 
-class FaceEnrollmentCreate(BaseModel):
+class FaceEnrollmentCreate(MutationModel):
     image: str = Field(min_length=1, max_length=14_000_000)
+
+
+    @field_validator("image")
+    @classmethod
+    def image_size(cls, value):
+        return bounded_image(value)
 
 
 class FaceEnrollmentResponse(BaseModel):
@@ -146,7 +169,7 @@ class FaceEnrollmentResponse(BaseModel):
     quality_score: float = Field(ge=0, le=1)
 
 
-class BulkUserCreate(BaseModel):
+class BulkUserCreate(MutationModel):
     users: list[UserRegister] = Field(min_length=1, max_length=1000)
 
 

@@ -1,0 +1,27 @@
+{
+  "date": "2026-09-29",
+  "backend_local": {
+    "tests": "356",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0",
+    "time": "65.371"
+  },
+  "postgresql_cases": 71,
+  "public_compatibility_regressions": 7,
+  "pinned_image": {
+    "passed": 285,
+    "seconds": 20.02
+  },
+  "public": {
+    "tests": "97",
+    "failures": "12",
+    "errors": "1",
+    "skipped": "16",
+    "time": "23.584"
+  },
+  "public_passed": 68,
+  "public_test_files_modified": false,
+  "user_decision": "Keep public tests unchanged and document the remaining conflicts",
+  "production_image": "sha256:17a24dd784c1beb7f5d3c35d3ed7a88887200e4e7549abb4f5c22479aa03847a"
+}

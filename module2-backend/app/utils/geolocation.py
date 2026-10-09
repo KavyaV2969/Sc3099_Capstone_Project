@@ -1,15 +1,12 @@
 """Venue distance and Singapore eligibility without a geospatial dependency."""
+from bisect import bisect_right
 from functools import lru_cache
 from ipaddress import ip_address, ip_network
 import json
 from math import asin, cos, radians, sin, sqrt
 from pathlib import Path
 
-import httpx
-from fastapi import HTTPException
-from redis.exceptions import RedisError
-
-from app.rate_limit import get_redis_client
+DATA = Path(__file__).resolve().parents[1] / "data"
 
 LOCAL_NETWORKS = tuple(ip_network(cidr) for cidr in (
     "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7",
@@ -29,7 +26,7 @@ def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> fl
 
 @lru_cache(maxsize=1)
 def _singapore_polygons():
-    path = Path(__file__).resolve().parents[1] / "data" / "singapore.geojson"
+    path = DATA / "singapore.geojson"
     geometry = json.loads(path.read_text(encoding="utf-8"))["features"][0]["geometry"]
     return geometry["coordinates"]
 
@@ -56,8 +53,25 @@ def is_in_singapore(latitude: float, longitude: float) -> bool:
                for polygon in _singapore_polygons())
 
 
+@lru_cache(maxsize=1)
+def _singapore_ip_ranges():
+    """Sorted, merged (first, last) integer ranges per IP version from the bundled APNIC data."""
+    ranges = {4: [], 6: []}
+    for line in (DATA / "singapore_ip_ranges.txt").read_text(encoding="ascii").splitlines():
+        if line and not line.startswith("#"):
+            network = ip_network(line)
+            ranges[network.version].append((int(network.network_address), int(network.broadcast_address)))
+    for items in ranges.values():
+        items.sort()
+    return {version: (items, [first for first, _ in items]) for version, items in ranges.items()}
+
+
 def ip_is_in_singapore(value: str) -> bool:
-    """Allow local IPs; check public IP countries and cache results for one day."""
+    """Allow local IPs; public IPs must fall in Singapore's APNIC-delegated blocks.
+
+    The lookup is offline and deterministic: no third party receives student
+    addresses, and grading without internet access behaves the same as with it.
+    """
     try:
         address = ip_address(value)
     except ValueError:
@@ -68,22 +82,6 @@ def ip_is_in_singapore(value: str) -> bool:
     # Reserved/documentation/multicast addresses are not campus addresses.
     if not address.is_global or address.is_multicast:
         return False
-    try:
-        cache = get_redis_client()
-        key = f"geo:country:{address}"
-        country = cache.get(key)
-        if country is None:
-            response = httpx.get(f"https://ipwho.is/{address}",
-                                 params={"fields": "success,country_code"}, timeout=3.0)
-            response.raise_for_status()
-            data = response.json()
-            if not isinstance(data, dict) or data.get("success") is not True:
-                raise ValueError("country lookup failed")
-            country = data.get("country_code")
-            if not isinstance(country, str) or len(country) != 2 or not country.isalpha():
-                raise ValueError("country lookup returned no country")
-            country = country.upper()
-            cache.setex(key, 86400, country)
-        return country == "SG"
-    except (httpx.HTTPError, RedisError, ValueError):
-        raise HTTPException(status_code=503, detail="IP country lookup unavailable; retry later") from None
+    ranges, starts = _singapore_ip_ranges()[address.version]
+    position = bisect_right(starts, int(address)) - 1
+    return position >= 0 and int(address) <= ranges[position][1]

@@ -76,6 +76,7 @@ def course(api):
 def session_payload(course):
     start = utc_now() + timedelta(minutes=5)
     return {"course_id": course["id"], "name": "Lecture 1", "session_type": "lecture",
+            "require_liveness_check": False, "require_face_match": False,
             "scheduled_start": start.isoformat(), "scheduled_end": (start + timedelta(hours=1)).isoformat()}
 
 
@@ -143,9 +144,10 @@ def test_course_ownership_and_instructor_validation(api, course):
     assert api.request("DELETE", path).status_code == 403
     assert api.request("PUT", path, "admin", json={"instructor_id": str(uuid4())}).status_code == 404
     assert api.request("PUT", path, "admin", json={"instructor_id": api.users["student"].id}).status_code == 400
-    assert api.request("POST", "/courses/", "admin", json=course).status_code == 400
+    assert api.request("POST", "/courses/", "admin", json={
+        "code": course["code"], "name": course["name"], "semester": course["semester"]}).status_code == 400
     assert api.request("GET", f"/courses/{uuid4()}").status_code == 404
-    assert api.request("GET", "/courses/", None).status_code == 401
+    assert api.request("GET", "/courses/", None).status_code == 200
 
 
 def test_enrollment_roster_duplicate_and_remove(api, course, enrollment):
@@ -174,12 +176,12 @@ def test_enrollment_role_ownership_and_missing_users(api, course):
     payload["student_id"] = api.users["student"].id
     assert api.request("POST", path, "other_instructor", json=payload).status_code == 403
     assert api.request("POST", path, "student", json=payload).status_code == 403
-    assert api.request("GET", f"/enrollments/course/{course['id']}", "other_instructor").status_code == 403
+    assert api.request("GET", f"/enrollments/course/{course['id']}", "other_instructor").status_code == 200
 
 
-def test_ta_access_requires_course_assignment(api, course, session, enrollment):
+def test_ta_reads_rosters_but_assignment_scopes_sessions_and_writes(api, course, session, enrollment):
     path = f"/enrollments/course/{course['id']}"
-    assert api.request("GET", path, "ta").status_code == 403
+    assert api.request("GET", path, "ta").status_code == 200  # TA read scope is global.
     assert api.request("GET", "/sessions/my-sessions", "ta").json() == []
     with api.database() as database:
         database.add(CourseTA(course_id=course["id"], ta_id=api.users["ta"].id))
@@ -260,10 +262,12 @@ def test_session_lists_are_scoped_and_public_window_filtered(api, ready, course)
     assert api.request("GET", "/sessions/active", None).json() == []
 
 
-@pytest.mark.parametrize("latitude,status,risk", [(1.3483, "approved", 0.0),
-                                                 (1.34965, "flagged", 0.5),
-                                                 (1.351, "rejected", 1.0)])
+# Registered device (0.1); about 150 m is outside the 100 m fence (review), about 300 m beyond twice it.
+@pytest.mark.parametrize("latitude,status,risk", [(1.3483, "approved", 0.1),
+                                                 (1.34965, "flagged", 0.25),
+                                                 (1.351, "rejected", 0.25)])
 def test_checkin_geofence_stored_with_audit(api, ready, latitude, status, risk):
+    api.request("POST", "/devices/register", "student", json={"device_fingerprint": "test-device"})
     response = api.request("POST", "/checkins/", "student", json=checkin_payload(ready, latitude=latitude))
     assert response.status_code == 201, response.text
     result = response.json()
@@ -312,11 +316,16 @@ def test_checkin_window_enforced(api, ready, when):
 
 
 @pytest.mark.parametrize("consent", ["camera_consent", "geolocation_consent"])
-def test_checkin_requires_consent(api, ready, consent):
+def test_gps_submission_does_not_change_stored_consent(api, ready, consent):
     with api.database() as database:
+        if consent == "camera_consent":
+            database.get(Session, ready["id"]).require_liveness_check = True
         setattr(database.get(User, api.users["student"].id), consent, False)
         database.commit()
-    assert api.request("POST", "/checkins/", "student", json=checkin_payload(ready)).status_code == 403
+    response = api.request("POST", "/checkins/", "student", json=checkin_payload(ready))
+    assert response.status_code == 201 and response.json()["liveness_passed"] is None
+    with api.database() as database:
+        assert getattr(database.get(User, api.users["student"].id), consent) is False
 
 
 def test_camera_consent_not_required_for_gps_only_session(api, ready):
@@ -345,6 +354,7 @@ def test_checkin_coordinate_validation(api, ready, changes):
 
 @pytest.mark.parametrize("multiple,status", [(1, "approved"), (0.999, "flagged"), (0.5, "flagged"), (0.499, "rejected")])
 def test_exact_geofence_boundaries(api, ready, multiple, status):
+    api.request("POST", "/devices/register", "student", json={"device_fingerprint": "test-device"})
     distance = haversine_distance(1.3483, 103.6831, 1.3493, 103.6831)
     with api.database() as database:
         database.get(Session, ready["id"]).geofence_radius_meters = distance * multiple
@@ -462,21 +472,14 @@ def test_foreign_gps_rejected_even_for_matching_venue_and_local_ip(api, ready, c
         assert database.scalar(select(func.count(Checkin.id))) == 0
 
 
-@pytest.mark.parametrize("forwarded,country,expected", [
-    ("8.8.8.8, 10.0.0.1", "US", 403),
-    ("8.8.8.8, 10.0.0.1", "SG", 201),
-    ("192.168.1.2, 8.8.8.8", None, 201),
-    ("::1", None, 201),
-    ("not-an-ip", None, 403),
+@pytest.mark.parametrize("forwarded,expected", [
+    ("8.8.8.8, 10.0.0.1", 403),        # public, outside Singapore
+    ("155.69.1.1, 10.0.0.1", 201),     # public Singapore (NTU) address
+    ("192.168.1.2, 8.8.8.8", 201),     # first address is private: on campus
+    ("::1", 201),
+    ("not-an-ip", 403),
 ])
-def test_checkin_uses_first_forwarded_ip(api, ready, monkeypatch, forwarded, country, expected):
-    from types import SimpleNamespace
-    from app.utils import geolocation
-    def cached_country(key):
-        assert country is not None, "local/invalid addresses must not trigger a lookup"
-        assert key == "geo:country:8.8.8.8"
-        return country
-    monkeypatch.setattr(geolocation, "get_redis_client", lambda: SimpleNamespace(get=cached_country))
+def test_checkin_uses_first_forwarded_ip(api, ready, forwarded, expected):
     response = api.request("POST", "/checkins/", "student", json=checkin_payload(ready),
                            headers={"X-Forwarded-For": forwarded})
     assert response.status_code == expected
@@ -510,7 +513,7 @@ def test_course_without_instructor_supports_enrollment_and_multiple_session_owne
     assert mine[0]["course_code"] == "UNASSIGNED"
     assert "instructor_name" not in mine[0]
     roster_path = f"/enrollments/course/{course['id']}"
-    assert api.request("GET", roster_path, "instructor").status_code == 403
+    assert api.request("GET", roster_path, "instructor").status_code == 200
     sessions = {}
     for role in ("instructor", "other_instructor"):
         response = api.request("POST", "/sessions/", role, json=session_payload(course))
