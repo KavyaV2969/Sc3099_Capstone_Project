@@ -55,7 +55,11 @@ def test_legacy_unknown_roster_is_not_reconstructed_after_admin_reset(api, ready
         db.commit()
     api.request("PATCH", f"/admin/sessions/{ready['id']}/status", "admin", json={"status":"scheduled"})
     api.request("PATCH", f"/sessions/{ready['id']}", json={"status":"active"})
-    assert api.request("GET", f"/stats/sessions/{ready['id']}").json()["attendance_rate"] is None
+    stats = api.request("GET", f"/stats/sessions/{ready['id']}").json()
+    # The unknown history is not rebuilt; current enrollment supplies a numeric denominator.
+    assert stats["coverage"]["denominator_available"] is False
+    assert stats["coverage"]["denominator_source"] == "current_enrollment"
+    assert stats["total_enrolled"] == 1 and stats["attendance_rate"] == 0
 
 
 def test_singapore_reporting_midnight():
@@ -146,7 +150,8 @@ def test_unexpected_errors_are_sanitized_in_response_and_logs(api, monkeypatch, 
     try:
         result = api.request("GET", "/users/me", "student")
         assert result.status_code == (503 if database_outage else 500)
-        assert result.json() == {"detail":"Database unavailable" if database_outage else "Internal server error"}
+        assert result.json() == ({"detail": "Database unavailable", "code": "SERVICE_UNAVAILABLE"} if database_outage
+                                 else {"detail": "Internal server error", "code": "INTERNAL_SERVER_ERROR"})
         assert "private-password" not in caplog.text and "image-payload" not in caplog.text
         assert result.headers["x-request-id"]
     finally:
@@ -434,7 +439,9 @@ def test_explicit_export_preserves_unavailable_session_exclusions(api, ready, st
     result = api.request("GET", f"/export/session/{ready['id']}?format=json")
     assert result.status_code == 200
     assert result.json()["records"] == [] and result.json()["summary"]["total"] == 0
-    assert result.json()["summary"]["attendance_rate"] is None
+    # Numeric (spec) rather than null; coverage still discloses the missing snapshot.
+    assert result.json()["summary"]["attendance_rate"] == 0
+    assert result.json()["summary"]["denominator_source"] == "current_enrollment"
     assert not result.json()["coverage"]["denominator_available"]
 
 
@@ -481,7 +488,7 @@ def test_legacy_roster_is_unavailable_and_csv_formulas_are_neutralized(api, read
         db.get(User, api.users["student"].id).full_name = prefix + "=1+1"
         db.commit()
     stats = api.request("GET", f"/stats/sessions/{ready['id']}").json()
-    assert stats["attendance_rate"] is None
+    assert stats["attendance_rate"] == 0 and stats["total_enrolled"] == 1
     assert not stats["coverage"]["denominator_available"]
     course_export = api.request("GET",f"/export/attendance/{ready['course_id']}?format=json")
     import json

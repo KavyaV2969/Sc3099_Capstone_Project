@@ -424,7 +424,8 @@ def test_tenth_failure_blocks_account_across_ips_and_correct_password(api, login
     for attempt in range(1, 11):
         response = api.request("POST", "/auth/login", None, json=wrong,
                                headers={"X-Forwarded-For": f"10.0.0.{attempt}"})
-        assert response.status_code == (429 if attempt == 10 else 401)
+        # All ten are failed passwords (401); the tenth blocks, further attempts get 429.
+        assert response.status_code == 401
     assert api.request("POST", "/auth/login", None, json=login_user).status_code == 429
     assert api.request("POST", "/auth/login", None, json={**login_user, "email": login_user["email"].upper()}).status_code == 429
     with api.database() as database:
@@ -440,7 +441,7 @@ def test_success_resets_failures_and_other_accounts_are_not_blocked(api, login_u
     assert api.request("POST", "/auth/login", None, json=login_user).status_code == 200
     with api.database() as database:
         assert database.get(User, api.users["student"].id).failed_login_attempts == 0
-    for _ in range(9):
+    for _ in range(10):
         assert api.request("POST", "/auth/login", None, json=wrong).status_code == 401
     assert api.request("POST", "/auth/login", None, json=wrong).status_code == 429
     other = {**login_user, "email": api.users["other_student"].email}

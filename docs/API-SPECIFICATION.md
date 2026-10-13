@@ -1,16 +1,5 @@
 # SAIV API Specification
 
-> **Current Module 2 policy (29 September 2026):** The user approved the
-> [public contract reductions](BACKEND-COMPLETION.md#approved-public-contract-reductions).
-> They supersede earlier conflicting examples only for optional liveness/GPS
-> accuracy, per-attempt GPS permission, keyless inventory, instructor reads,
-> the public course catalogue and the flagged response envelope. Other written
-> requirements and grading/security values continue to govern.
-
-> **Later grading overrides:** Read
-> [`GRADING-CLARIFICATIONS.md`](GRADING-CLARIFICATIONS.md) first. It defines the
-> graded account lockout, rate-limit overrides, and Singapore-only check-in rules.
-
 ## Base URL
 ```
 http://localhost:8000/api/v1
@@ -69,11 +58,6 @@ Register a new user.
 
 #### POST /auth/login
 Login to receive JWT tokens.
-
-After ten consecutive failed passwords on the same account, the account is blocked.
-The tenth failure and later attempts return `429 Too Many Requests`, including a
-correct-password attempt, until an administrator reactivates the account. See
-[`GRADING-CLARIFICATIONS.md`](GRADING-CLARIFICATIONS.md).
 
 **Request:**
 ```json
@@ -262,8 +246,7 @@ const response = await fetch('/api/v1/users/me/face/enroll', {
 ### Courses
 
 #### GET /courses/
-List public course metadata with optional filters. **No authentication required.**
-Results order by creation time descending, then ID. Instructor assignment is a public catalogue filter; detail and mutations retain authentication.
+List courses with optional filters. **Requires auth.**
 
 **Query Parameters:**
 | Parameter | Type | Default | Description |
@@ -505,9 +488,9 @@ Update a session. **Requires auth (instructor only, must be session owner).**
 **Response:** `200 OK` - Returns updated session object
 
 **Status Transitions:**
-- `scheduled` â†’ `active`: Opens check-in window
-- `active` â†’ `closed`: Closes check-in, finalizes attendance
-- Any status â†’ `cancelled`: Cancels session
+- `scheduled` → `active`: Opens check-in window
+- `active` → `closed`: Closes check-in, finalizes attendance
+- Any status → `cancelled`: Cancels session
 
 #### DELETE /sessions/{session_id}
 Delete a session. **Requires auth (instructor only, must be session owner).**
@@ -525,9 +508,6 @@ Check-ins record student attendance at sessions.
 #### POST /checkins/
 Student check-in to a session. **Requires auth (student only).**
 
-This endpoint also enforces the graded Singapore-only GPS and client-IP rules in
-[`GRADING-CLARIFICATIONS.md`](GRADING-CLARIFICATIONS.md).
-
 **Request:**
 ```json
 {
@@ -536,7 +516,7 @@ This endpoint also enforces the graded Singapore-only GPS and client-IP rules in
   "longitude": 103.6831,
   "location_accuracy_meters": 10.0,
   "device_fingerprint": "unique_device_id",
-  "liveness_challenge_response": "base64_encoded_image",  // Required for face matching; optional consented liveness evidence
+  "liveness_challenge_response": "base64_encoded_image",  // Optional
   "qr_code": "session_qr_code"  // Optional, if session requires QR
 }
 ```
@@ -561,51 +541,16 @@ This endpoint also enforces the graded Singapore-only GPS and client-IP rules in
 }
 ```
 
-**Verification requirements:** Required face matching needs camera consent,
-face enrollment and a nonblank image. Liveness is evaluated only when the session
-requests it, camera consent is true and a nonblank image is supplied. Otherwise
-no liveness call is made, its fields are null and its contribution is zero without
-redistributing weights. Evaluated checks require complete validated evidence;
-failed checks reject and malformed/unavailable evidence returns a dependency error.
-The effective liveness decision is frozen and rechecked under final locks.
-
-Submitting coordinates permits that authenticated attendance attempt; it does
-not change the stored geolocation preference. Accuracy can be omitted or null;
-supplied values must be finite and nonnegative. Unknown accuracy remains null in
-storage/responses/signing, adds the existing 0.25 geolocation-risk adjustment and
-prevents impossible-travel inference unless both radii are known. Singapore/IP
-eligibility and the critical geofence rule still apply.
-
-Backend scoring is local (`weighted-v1`), using Security's five weights. Liveness
-and face risk are `1 - score`. With valid one-use cryptographic proof, device risk
-is 0 for an active owned trusted device and 0.5 for an active owned untrusted
-device; unsigned or keyless submissions receive device risk 1. Geolocation risk is
-`min(1, distance/radius)`, increased by 0.25 and capped at 1 when accuracy is unknown or exceeds
-radius. Network detection remains unavailable and contributes zero in the current
-backend; this does not establish freedom from VPN/proxy use. Registration alone is not
-cryptographic device proof. Positive factors include `risk`, `weight`,
-`contribution`, `severity`, and a `critical` flag. Scores are rounded to four decimal
-places before applying the decision table. The outcome audit records the policy,
-effective threshold, enabled checks and all contributions without image/hash data.
-
-Explicit session thresholds override the course threshold. New courses without an
-explicit threshold use `RISK_SCORE_THRESHOLD` (default 0.50). Existing course/session
-thresholds retain their persisted values.
-
 **Check-in Status Logic:**
 | Risk Score | Critical Signals | Result |
 |------------|------------------|--------|
-| < threshold and < 0.70 | None | `approved` |
-| >= threshold and < 0.70 | None | `flagged` (requires review) |
-| Any | Liveness or face matching failed | `rejected` |
-| >= 0.70 | Any | `rejected`, even if the session threshold is higher |
+| < threshold | None | `approved` |
+| >= threshold | None | `flagged` (requires review) |
+| Any | Liveness failed | `rejected` |
 | Any | GPS > 2x geofence | `rejected` |
 
 **Error Responses:**
-- `400 Bad Request`: Session not active, check-in window closed, already checked in, missing required image, or image rejected by the face service
-- `503 Service Unavailable`: Required verification is unavailable or its response is malformed/inconsistent; no check-in is created
-- `409 Conflict`: Verification flags or enrolled reference changed during processing; reload session requirements and submit a new check-in
-- `401 Unauthorized` / `403 Forbidden`: Account, role, consent or enrollment became ineligible
+- `400 Bad Request`: Session not active, check-in window closed, already checked in
 - `404 Not Found`: Session not found
 
 #### GET /checkins/
@@ -696,18 +641,36 @@ Get all check-ins for a session. **Requires auth (instructor/TA).**
 ```
 
 #### GET /checkins/flagged
-Get flagged or appealed check-ins. **Requires instructor, assigned TA or admin.**
-Instructors/admins can read all courses; TAs remain limited to assigned courses.
-Optional `course_id`/`session_id` filters apply before pagination. `limit` defaults
-to 50, maximum 100; `offset` defaults to 0. Ordering is checked-in time, then ID.
-The total counts all matches before pagination. This envelope deliberately
-replaces the historical array; there is no compatibility mode.
+Get check-ins requiring review (flagged or appealed). **Requires auth (instructor/TA).**
+
+**Query Parameters:**
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `course_id` | uuid | - | Filter by course |
+| `session_id` | uuid | - | Filter by session |
+| `limit` | int | 50 | Results per page |
 
 **Response:** `200 OK`
 ```json
-{"items": [], "total": 0, "limit": 50, "offset": 0}
+[
+  {
+    "id": "uuid",
+    "session_id": "uuid",
+    "session_name": "Lecture 5",
+    "student_id": "uuid",
+    "student_name": "John Doe",
+    "status": "flagged",  // or "appealed"
+    "checked_in_at": "2024-01-15T14:05:00Z",
+    "risk_score": 0.72,
+    "risk_factors": [
+      {"type": "geo_out_of_bounds", "severity": "high", "weight": 0.4},
+      {"type": "device_unknown", "severity": "medium", "weight": 0.15}
+    ],
+    "appeal_reason": null,  // Set if status is "appealed"
+    "appealed_at": null
+  }
+]
 ```
-Items use the existing full check-in representation.
 
 #### GET /checkins/{checkin_id}
 Get specific check-in details. **Requires auth (owner student, or instructor/TA for session).**
@@ -923,14 +886,6 @@ Device management for security and trust scoring.
 
 #### POST /devices/register
 Register a new device. **Requires auth.**
-
-The fingerprint is 1–64 characters and globally unique. `public_key` is optional
-and nullable. Supplied keys must be valid PEM P-256 or RSA >=2048 bits. New keyless
-devices are untrusted and cannot obtain challenges. On re-registration, omission
-preserves a credential; explicit null removes it and clears trust. A bounded
-`browser` string (<=255 characters) is accepted but neither stored nor returned.
-Ownership conflicts return 400; administrative revocation remains enforced.
-Names and platforms are still required; legacy null values remain readable.
 
 **Request:**
 ```json
@@ -1216,19 +1171,6 @@ Export check-in data for a session. **Requires auth (instructor for session).**
 
 This service handles face enrollment, face matching, liveness detection, and risk assessment.
 It is called internally by the Backend API and does not require authentication.
-
-The backend validates endpoint-specific results. Pass flags must be JSON booleans;
-scores/thresholds must be finite JSON numbers in [0,1]. Verification requires
-`match_passed`, `match_score`, `match_threshold` (0.70), and `face_detected`.
-Liveness requires `liveness_passed`, `liveness_score`, and `liveness_threshold`
-(0.60). Pass flags must agree with these cutoffs; a match cannot pass without a
-face. Successful enrollment requires the documented hash, quality and detection
-confidence. Optional template hashes are validated when present. Additional fields
-are allowed. Empty/inconsistent results, unexpected HTTP statuses, transport errors
-and invalid JSON produce controlled backend HTTP 503 rather than attendance approval.
-Service HTTP 400/422 maps to backend HTTP 400. Successful service status is 201 for
-enrollment and 200 for verification/liveness.
-
 
 > **Note:** Liveness detection (`/liveness/check`) is a **BONUS feature** due to its complexity.
 > The core required features are face enrollment and face matching.
@@ -1727,16 +1669,12 @@ All endpoints may return these error codes:
 
 ## Rate Limiting
 
-> **Grading override:** Use 100,000/hour/IP for login and registration. Retain
-> 1,000/hour/user for general authenticated API requests and 10/minute/user for
-> check-in attempts. See [`GRADING-CLARIFICATIONS.md`](GRADING-CLARIFICATIONS.md).
-
 | Endpoint Type | Limit | Window |
 |---------------|-------|--------|
-| Login attempts | 100,000 | per hour per IP |
+| Login attempts | 60 | per hour per IP |
 | API requests | 1000 | per hour per user |
 | Check-in attempts | 10 | per minute per user |
-| Registration | 100,000 | per hour per IP |
+| Registration | 10 | per hour per IP |
 
 ---
 
@@ -2009,21 +1947,3 @@ if face_result.get("enrollment_successful"):
     user.face_enrolled = True
     db.commit()
 ```
-# Implemented backend contract â€” 29 September 2026
-
-For implemented Module 2 behavior, the completion contract in
-[BACKEND-COMPLETION.md](BACKEND-COMPLETION.md) takes precedence over older examples
-in this document. It specifies activation, signed device challenges, retained
-attendance denominators, input bounds, error/retry behavior and correlation.
-Existing `/api/v1` paths remain compatible; the flagged queue intentionally changes from an array to the documented envelope.
-Unsupported mutation fields return 422; nonblank QR input is unsupported.
-Statistics attendance rates can be null when historical denominators are unknown.
-Date ranges with no retained overlap return 422; a valid empty retained period
-still returns zero. Explicit session exports do not apply the course report's
-default scheduled-date range; retained eligible rows and summary agree across
-Singapore midnight. Administrative account activation includes newly eligible
-students in known active rosters without reconstructing closed or unknown history.
-
-Public-consumer compatibility aliases and admin summary/inventory routes are
-listed in [BACKEND-COMPLETION.md](BACKEND-COMPLETION.md#public-test-compatibility-additions--29-september-2026).
-The approved reductions above govern conflicting authentication/key/consent/liveness examples; required face matching and evaluated biometric evidence stay strict.

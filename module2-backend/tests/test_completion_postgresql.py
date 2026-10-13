@@ -110,7 +110,7 @@ def test_retention_advisory_lock_prevents_overlap(canonical):
         assert cleanup_expired_records(second) == result
 
 
-def test_concurrent_bad_passwords_preserve_tenth_attempt_lockout(canonical, monkeypatch):
+def test_concurrent_bad_passwords_block_after_tenth_failure(canonical, monkeypatch):
     from app.schemas.auth import LoginRequest
     from app.security import hash_password
     monkeypatch.setattr(auth,"enforce_login_limit",lambda _:None)
@@ -126,7 +126,7 @@ def test_concurrent_bad_passwords_preserve_tenth_attempt_lockout(canonical, monk
             except HTTPException as exc: return exc.status_code
     with ThreadPoolExecutor(12) as pool:
         outcomes = list(pool.map(attempt, range(12)))
-    assert outcomes.count(401)==9 and outcomes.count(429)==3
+    assert outcomes.count(401)==10 and outcomes.count(429)==2  # Ten failures, then blocked.
     with Session(canonical) as db:
         assert db.scalar(select(User.failed_login_attempts))==10
 
@@ -343,9 +343,14 @@ def test_nullable_accuracy_upgrade_preserves_rows_and_refuses_lossy_downgrade(pg
             location_accuracy_meters=10, distance_from_venue_meters=0, status="approved", risk_score=.2)
         db.add(item); db.flush(); cid=item.id; db.commit()
     with pg_database.begin() as connection:
-        before = snapshot(connection)
+        from sqlalchemy import inspect
+        inspector = inspect(connection)
+        # Compare the columns that existed before; later revisions may add tables/columns.
+        existing = {name: sorted(c["name"] for c in inspector.get_columns(name))
+                    for name in inspector.get_table_names() if name != "alembic_version"}
+        before = snapshot(connection, existing)
         command.upgrade(migration_config(connection), "head")
-        assert snapshot(connection) == before
+        assert snapshot(connection, existing) == before
     assert inspect_readiness(pg_database).healthy
     with pg_database.begin() as connection:
         command.downgrade(migration_config(connection), "20260929_0008")

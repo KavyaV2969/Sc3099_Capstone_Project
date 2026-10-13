@@ -34,7 +34,7 @@ Set `FACE_SERVICE_URL` to the real service when available. For host-side tooling
 use explicit `127.0.0.1` database/Redis URLs to avoid Windows IPv6 fallback delays.
 
 The production image includes the complete recovery/verification source set.
-The current canonical head is `20260929_0009`. Legacy recovery first verifies
+The current canonical head is `20261013_0010`. Legacy recovery first verifies
 the historical `20260928_0006` destination, then applies the normal forward
 completion migrations. See the [recovery runbook](../docs/F00-DATABASE-RECOVERY.md).
 `/health` is a fast liveness probe (database `SELECT 1` and Redis ping); it reports
@@ -58,43 +58,30 @@ OpenAPI is available at `/docs`; all API routes use `/api/v1`.
 | Reports | Overview/session/course/student statistics; CSV/JSON exports |
 | Audit/operations | Admin audit querying; immutable storage; retention worker; `/health` and `/metrics` |
 
-HS256 access tokens last one hour and refresh tokens seven days. Passwords use
-bcrypt cost 10 by default. Refresh issues another pair without revoking the old
-refresh token. Ten consecutive bad passwords block login, including attempt ten;
-documented admin activation resets the counter. Grading rate limits are preserved.
+Every endpoint in the school's API specification is implemented. Where behavior differs
+from or extends the school documents, the reason is recorded in
+[BACKEND-DEVIATIONS.md](../docs/BACKEND-DEVIATIONS.md); the coordinator's announcements are in
+[GRADING-CLARIFICATIONS.md](../docs/GRADING-CLARIFICATIONS.md). In summary:
 
-Instructors read all student/course data. Enrollment writes and reviews require
-a teaching relationship, and session mutation still requires ownership/admin. Administrators retain access and assigned TAs retain documented course
-permissions. CourseTA provisioning uses the idempotent operator SQL in the
-completion contract; no unnecessary TA-management endpoint was added.
-
-Check-ins require active course/student/enrollment/session/window, Singapore/local
-IP and GPS eligibility, and one record per student/session. Coordinates authorize
-only that attempt without changing stored GPS consent. Accuracy is optional/null;
-unknown accuracy increases geolocation risk and skips travel inference. Liveness
-runs only when requested with camera consent and a nonblank image, otherwise null
-results/zero contribution. Required face matching remains strict. Missing required evidence
-returns 400, dependency failure 503, and changed policy/reference hash 409, with
-no attendance row. Valid failed verification persists a rejected check-in (201).
-Clients must inspect returned status rather than count all 201 responses as success.
-Five fixed risk weights and critical rejection rules are preserved. Unsigned
-devices receive unknown-device risk; registered/trusted scoring requires verified
-single-use key possession proof. Impossible travel flags review. The network
-user-agent hint is a heuristic, not verified VPN detection.
-
-Attendance rates use approved eligible students / retained historical roster,
-never submissions. Reports disclose 30-day coverage and unknown denominators as
-null; status/submission counts remain separate. Session dates use Asia/Singapore.
-Date ranges with no retained overlap return 422. Explicit session exports use
-that eligible retained session rather than the course report's default date bounds.
-Administrative reactivation includes newly eligible students in known active
-rosters; closed and unknown historical rosters remain intact.
-CSV formulas are neutralized and exports stream bounded batches. Mutation inputs
-reject unsupported fields, nonblank QR input and oversized image/request data.
-QR issuance, standalone attestation, duplicate risk-signal storage, extra metadata,
-email delivery, refresh rotation/logout, paid network reputation and OTLP export
-are intentionally deferred. Backend request IDs, trace-context propagation and
-required metrics are implemented.
+- **Authentication.** HS256 access tokens last one hour and refresh tokens seven days;
+  bcrypt cost 10. Ten consecutive failed passwords return 401 and block the account;
+  further attempts return 429 until an admin reactivates it. `POST /auth/logout` revokes
+  the presented tokens.
+- **Check-ins** require an active session within its window, an active enrollment, GPS
+  inside Singapore and a Singapore or private client IP (offline APNIC data). Biometric
+  failure or GPS beyond twice the geofence rejects; risk >= 0.70 rejects; risk >= the
+  session threshold flags. Outside the geofence, unregistered or shared devices and
+  impossible travel also flag for review. Session-requested liveness without a usable
+  image counts as maximum liveness risk. Clients must read `status` rather than treat
+  every 201 as approved.
+- **Roles.** Instructors and TAs read attendance for every course; session changes need
+  ownership, and reviews need a teaching relationship or an admin-assigned TA
+  (`PUT /admin/courses/{course_id}/tas/{ta_id}`).
+- **Reports** use roster snapshots (falling back to current enrollment), cover the 30-day
+  retention window and always return numeric rates. Each risk factor is also stored in
+  `risk_signals`.
+- **Errors** are `{"detail", "code"}`; unknown request fields are ignored; names reject
+  HTML markup and prose is stored escaped.
 
 ## Verification
 
@@ -109,10 +96,7 @@ data and remain ignored. Disable the cleanup worker during the test process.
 ..\.venv\Scripts\python.exe -m pytest tests -q
 ```
 
-The release report records full-suite, PostgreSQL/Redis, migration/recovery,
-deployment, Prometheus and 10/100-user HTTP evidence. The selected external
-backend tests recorded 66 passes and one supplied skip.
+Latest results (13 October 2026): 426 backend tests passed including PostgreSQL;
+school public suite 77/77 backend points; 100 concurrent students checked in with
+p95 latency under 1.4 s.
 Required face checks must not be disabled to claim real biometric interoperability.
-See the [current release report](../output/backend-handover-fixes-2026-09-29.md)
-for the latest results and the [completion contract](../docs/BACKEND-COMPLETION.md)
-for the accepted public-test behavior.

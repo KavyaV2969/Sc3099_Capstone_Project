@@ -43,7 +43,7 @@ def configure(connection, operator_url, application_url, dashboard_url=None):
             cursor.execute(sql.SQL("GRANT USAGE ON SCHEMA public TO {}").format(role))
             cursor.execute(sql.SQL("REVOKE ALL ON ALL TABLES IN SCHEMA public FROM {}").format(role))
             if readonly:
-                for table in ("courses", "course_tas", "enrollments", "sessions", "checkins", "devices"):
+                for table in ("courses", "course_tas", "enrollments", "sessions", "checkins", "risk_signals", "devices"):
                     cursor.execute(sql.SQL("GRANT SELECT ON {} TO {}").format(sql.Identifier(table), role))
                 cursor.execute(sql.SQL("GRANT SELECT (id,email,full_name,role,is_active,face_enrolled,created_at,updated_at) ON users TO {}").format(role))
             else:

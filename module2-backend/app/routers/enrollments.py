@@ -175,8 +175,9 @@ def delete_enrollment(enrollment_id: UUID4, request: Request,
         raise HTTPException(status_code=404, detail="enrollment not found")
     course = get_course(database, enrollment.course_id)
     require_course_access(database, course, current_user, allow_ta=False)
-    write_audit_log(database, request, action="enrollment_removed", user_id=current_user.id,
-                    resource_type="enrollment", resource_id=enrollment.id)
-    database.delete(enrollment)
+    if enrollment.is_active:  # Soft delete; repeating the request is a no-op (idempotent).
+        enrollment.is_active, enrollment.dropped_at = False, utc_now()
+        write_audit_log(database, request, action="enrollment_removed", user_id=current_user.id,
+                        resource_type="enrollment", resource_id=enrollment.id)
     database.commit()
     return Response(status_code=204)

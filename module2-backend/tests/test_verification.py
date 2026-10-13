@@ -189,7 +189,9 @@ def risk(**changes):
 def test_thresholds_apply_without_optional_biometrics(threshold, status):
     decision = risk(threshold=threshold, known_device=True)  # Registered device: no review reason.
     assert decision.score == .1 and decision.status == status
-    assert decision.factors[0]["risk"] == .5 and decision.factors[0]["contribution"] == .1
+    # A factor's weight is its contribution to the score, as in the API example.
+    assert decision.factors[0]["risk"] == .5 and decision.factors[0]["weight"] == .1
+    assert decision.factors[0]["type"] == "device_untrusted" and decision.factors[0]["category"] == "device"
 
 
 def test_weights_accuracy_device_and_geofence_boundaries():
@@ -212,7 +214,8 @@ def test_critical_score_overrides_threshold_and_failures_have_factors():
     decision = risk(require_liveness=True, liveness_score=0, liveness_passed=False,
                     require_face=True, face_score=.6, face_passed=False, distance=100, threshold=1)
     assert decision.score == .7 and decision.status == "rejected"
-    assert {f["type"] for f in decision.factors if f["critical"]} == {"liveness", "face_match"}
+    assert {f["type"] for f in decision.factors if f["critical"]} == {"liveness_failed", "face_match_failed"}
+    assert {f["severity"] for f in decision.factors if f["critical"]} == {"critical"}
     failed = risk(require_face=True, face_score=.6999, face_passed=False, known_device=True, trusted_device=True)
     assert failed.status == "rejected" and failed.score < .1 and failed.factors[0]["critical"]
 

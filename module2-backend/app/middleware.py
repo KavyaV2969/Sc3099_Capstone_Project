@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from sqlalchemy.exc import OperationalError, TimeoutError as DatabaseTimeout
 from starlette.responses import JSONResponse
 from app.metrics import request_id, traceparent, request_duration, request_errors
+from app.responses import error_body
 
 MAX_BODY_BYTES = 16 * 1024 * 1024
 logger = logging.getLogger(__name__)
@@ -50,7 +51,7 @@ class RequestMiddleware:
         try:
             length = headers.get(b"content-length")
             if length is not None and (not length.isdigit() or int(length) > MAX_BODY_BYTES):
-                response = JSONResponse({"detail": "request body exceeds 16 MiB"}, status_code=413)
+                response = JSONResponse(error_body(413, "request body exceeds 16 MiB"), status_code=413)
                 await response(scope, receive, correlated_send)
             else:
                 try:
@@ -62,7 +63,8 @@ class RequestMiddleware:
                     logger.error("unhandled request error category=%s request_id=%s", type(exc).__name__, rid)
                     if not response_started:
                         unavailable = isinstance(exc, (OperationalError, DatabaseTimeout))
-                        await JSONResponse({"detail": "Database unavailable" if unavailable else "Internal server error"},
+                        await JSONResponse(error_body(503 if unavailable else 500,
+                                                      "Database unavailable" if unavailable else "Internal server error"),
                                            status_code=503 if unavailable else 500)(
                             scope, receive, correlated_send)
         finally:

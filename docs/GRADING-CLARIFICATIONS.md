@@ -1,74 +1,66 @@
 # SAIV Grading Clarifications
 
-> **Current Module 2 policy (29 September 2026):** The user approved the
-> [public contract reductions](BACKEND-COMPLETION.md#approved-public-contract-reductions).
-> They supersede earlier conflicting examples only for optional liveness/GPS
-> accuracy, per-attempt GPS permission, keyless inventory, instructor reads,
-> the public course catalogue and the flagged response envelope. Other written
-> requirements and grading/security values continue to govern.
+Announcements from the course coordinator (Assoc. Prof. Zhang Tianwei) issued after
+the original requirements and codebase. They are recorded here as received. How this
+implementation applies them, and every place it differs from the original documents,
+is listed separately in [BACKEND-DEVIATIONS.md](BACKEND-DEVIATIONS.md).
 
-These clarifications were announced after the original requirements were issued.
-They override conflicting values or behavior elsewhere in the project documentation.
-All other requirements remain unchanged.
+---
 
-## Authority
+## Clarifications on the design requirement and codebase
 
-Use the following precedence when requirements conflict:
+> Dear students,
+>
+> Below are some clarifications regarding the design requirement and codebase.
+>
+> 1. The login endpoint must implement the following: after 10 consecutive failed
+>    password attempts on the same account, that account must be blocked and further
+>    login attempts must return HTTP 429. This is graded.
+> 2. If you have implemented per-IP rate limiting as described in the documentation,
+>    please increase the limit values to a large number (e.g., 100,000 per hour), so
+>    that the test suite will not be blocked. We have hidden tests to check if this
+>    feature has been properly implemented.
+> 3. Singapore-only check-ins is graded. Check-ins must be rejected (HTTP 403, or
+>    created with status "rejected") when the client IP is a public IP outside
+>    Singapore, or the GPS coordinates are outside Singapore. Take the client IP from
+>    the X-Forwarded-For header when present (first address), falling back to the
+>    socket address; private/local addresses (e.g., 192.168.x.x, 10.x.x.x, 127.x.x.x)
+>    may be treated as on-campus and allowed.
+> 4. The public tests total 92 points right now.
+>
+> Best regards,
+> Tianwei
 
-1. This grading-clarifications document
-2. `SECURITY-REQUIREMENTS.md`
-3. `API-SPECIFICATION.md`
-4. Documents under `recommended_design/`
+---
 
-Public tests help validate the implementation, but do not override these written
-requirements.
+## Update on the Codebase (29/08/2026)
 
-## Account lockout
+> Dear students,
+>
+> There are some other minor updates on the codebase, to address some library
+> mismatch issues and clear the comments. Please use the latest version on NTULearn.
+> Basically,
+>
+> - Pinned mediapipe==0.10.18 (newer versions removed mp.solutions)
+> - regenerated the endpoint comments in module2-backend/app/main.py to match the API spec,
+> - removed the non-existent instructor_id/instructor_name fields from the spec
+>
+> Thanks to the students and TA who point out these issues.
+>
+> Best regards,
+> Tianwei
 
-Login must track consecutive failed password attempts for each account. After ten
-consecutive failed password attempts on the same account, the account is blocked.
-The tenth failed attempt and all later login attempts must return HTTP 429, including
-an attempt using the correct password. A successful login before the tenth failure
-resets the consecutive-failure counter.
+---
 
-The existing administrative account-reactivation flow may unblock the account and
-reset its failed-attempt counter.
+## Update on the Codebase (Module 3 Dockerfile)
 
-## Rate-limit values used for grading
-
-Redis-backed rate limiting must remain implemented, but the IP-based limits must be
-large enough that the test suite does not exhaust them:
-
-| Endpoint category | Grading limit | Window | Key |
-|---|---:|---:|---|
-| Login attempts | 100,000 | 1 hour | Client IP address |
-| Registration | 100,000 | 1 hour | Client IP address |
-| General authenticated API | 1,000 | 1 hour | User ID |
-| Check-in attempts | 10 | 1 minute | User ID |
-
-The 100,000/hour login and registration values override the lower values elsewhere
-in the documentation. The account lockout above is independent of per-IP rate
-limiting and must still occur after ten consecutive password failures on one account.
-
-## Singapore-only check-ins
-
-Check-ins must be rejected with HTTP 403, or persisted with status `rejected`, when:
-
-- The submitted GPS coordinates are outside Singapore; or
-- The client uses a public IP address outside Singapore.
-
-Determine the client IP from the first address in `X-Forwarded-For` when that header
-is present. Otherwise, use the request socket address. Private and local addresses,
-including `10.0.0.0/8`, `192.168.0.0/16`, and `127.0.0.0/8`, may be treated as
-on-campus and allowed.
-
-This Singapore rule takes precedence over general VPN/proxy examples in the
-recommended integration and risk guidance. A private or local address must not be
-rejected merely because it is private or local.
-
-## Public-test score announcement
-
-At the time of the announcement, the public tests totalled 92 points. This is grading
-context rather than an API or security rule. Current reports should state the actual
-tests and points observed because the public suite may change later.
-
+> Dear students,
+>
+> There is an update on the codebase. For module3-face-recognition/Dockerfile,
+> Line 10, it should be libgl1 \ instead of libgl1-mesa-glx \
+>
+> I have uploaded the new version of code on the NTULearn. Please use it for your
+> project.
+>
+> Best regards,
+> Tianwei

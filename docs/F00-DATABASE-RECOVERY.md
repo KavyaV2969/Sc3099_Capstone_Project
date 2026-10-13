@@ -21,7 +21,7 @@ JSON/TEXT conversion. Normalized newlines make checksums stable across Windows
 and Linux Git checkouts. PostgreSQL dump checksums always cover the exact bytes.
 
 Canonical migration history is unchanged. The historical recovery destination is
-`20260928_0006`; current readiness requires `20260929_0009` after forward upgrades.
+`20260928_0006`; current readiness requires `20261013_0010` after forward upgrades.
 The separate legacy head `20260928_legacy01` applies the missing metadata,
 constraints, defaults and indexes. It can run only through the recovery command.
 Do not copy the legacy branch into the canonical migration directory or replay
@@ -207,7 +207,7 @@ this change.
 # Forward completion migration — 29 September 2026
 
 The dated recovery evidence below remains the historical baseline at
-`20260928_0006`. Current readiness requires `20260929_0009`. Legacy recovery
+`20260928_0006`. Current readiness requires `20261013_0010`. Legacy recovery
 first verifies the historical destination and its preserved rows, then applies
 the subsequent canonical completion migrations. The current contract additionally
 checks the audit trigger/function definitions and enabled state. See

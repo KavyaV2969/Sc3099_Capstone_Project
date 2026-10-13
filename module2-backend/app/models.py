@@ -142,6 +142,8 @@ class Enrollment(Base):
     course_id: Mapped[str] = mapped_column(ForeignKey("courses.id"), index=True)
     enrolled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Removal is a soft delete: the row (and its audit trail) stays, marked inactive.
+    dropped_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class Session(Base):
@@ -245,3 +247,27 @@ class Checkin(Base):
     scheduled_deletion_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=retention_deadline
     )
+
+
+class RiskSignal(Base):
+    """One row per risk factor of a check-in (the recommended schema's risk_signals table)."""
+    __tablename__ = "risk_signals"
+    __table_args__ = (
+        CheckConstraint("severity IN ('low', 'medium', 'high', 'critical')", name="ck_risk_signals_severity"),
+        CheckConstraint("confidence BETWEEN 0 AND 1", name="ck_risk_signals_confidence"),
+        CheckConstraint("weight >= 0", name="ck_risk_signals_weight"),
+        Index("ix_risk_signals_checkin_id", "checkin_id"),
+        Index("ix_risk_signals_signal_type", "signal_type"),
+        Index("ix_risk_signals_severity", "severity"),
+        Index("ix_risk_signals_detected_at", "detected_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    # Retention deletes check-ins in bulk; their signals go with them.
+    checkin_id: Mapped[str] = mapped_column(ForeignKey("checkins.id", ondelete="CASCADE"), nullable=False)
+    signal_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    severity: Mapped[str] = mapped_column(String(20), nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    details: Mapped[dict[str, Any] | None] = mapped_column(JSONText, nullable=True)
+    weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    detected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)

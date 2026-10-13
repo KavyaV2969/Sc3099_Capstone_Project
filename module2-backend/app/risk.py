@@ -26,6 +26,27 @@ def _biometric_risk(required: bool, score: float | None, passed: bool | None, cu
     return 1.0 - score
 
 
+NETWORK_SIGNALS = ("vpn_detected", "proxy_detected", "tor_detected")
+
+
+def _signal_type(category: str, *, critical: bool, liveness_missing: bool, known_device: bool,
+                 shared_device: bool, network_signal: str, out_of_bounds: bool, accuracy_low: bool) -> str:
+    """Name a category's contribution with the recommended schema's signal types.
+
+    Non-schema names (liveness_missing, device_untrusted, device_shared, geo_distance)
+    cover cases the schema list does not distinguish; see BACKEND-DEVIATIONS.md.
+    """
+    if category == "liveness":
+        return "liveness_failed" if critical else "liveness_missing" if liveness_missing else "liveness_low_confidence"
+    if category == "face_match":
+        return "face_match_failed" if critical else "face_match_low_confidence"
+    if category == "device":
+        return "device_shared" if shared_device else "device_untrusted" if known_device else "device_unknown"
+    if category == "network":
+        return network_signal
+    return "geo_out_of_bounds" if out_of_bounds else "geo_accuracy_low" if accuracy_low else "geo_distance"
+
+
 def assess_risk(
     *, distance: float, radius: float, location_accuracy: float | None,
     require_liveness: bool, require_face: bool,
@@ -33,7 +54,7 @@ def assess_risk(
     face_score: float | None, face_passed: bool | None,
     known_device: bool, trusted_device: bool, local_network: bool,
     threshold: float, network_risk: float | None = None, impossible_travel: bool = False,
-    liveness_requested: bool = False, shared_device: bool = False,
+    liveness_requested: bool = False, shared_device: bool = False, network_signal: str = "vpn_detected",
 ) -> RiskDecision:
     """Score a check-in.
 
@@ -42,18 +63,25 @@ def assess_risk(
     liveness risk, as in the recommended integration guide, never a free pass.
     Review reasons (outside geofence, unknown/shared device, impossible travel)
     flag an otherwise approved check-in without adding a rejection rule.
+
+    Each factor's ``weight`` is its contribution to the score (as in the API
+    example), so the weights of a check-in's factors sum to its risk score.
     """
     if not all(isfinite(v) for v in (distance, radius, threshold)) or (
         distance < 0 or radius <= 0 or not 0 <= threshold <= 1
         or (location_accuracy is not None and (not isfinite(location_accuracy) or location_accuracy < 0))
     ):
         raise ValueError("invalid risk inputs")
+    if network_signal not in NETWORK_SIGNALS:
+        raise ValueError("unknown network signal type")
     geo_risk = min(1.0, distance / radius)
     if network_risk is not None and (not isfinite(network_risk) or not 0 <= network_risk <= 1):
         raise ValueError("invalid network signal")
-    if location_accuracy is None or location_accuracy > radius:
+    accuracy_low = location_accuracy is None or location_accuracy > radius
+    if accuracy_low:
         geo_risk = min(1.0, geo_risk + .25)
-    if liveness_requested and not require_liveness:
+    liveness_missing = liveness_requested and not require_liveness
+    if liveness_missing:
         if liveness_score is not None or liveness_passed is not None:
             raise ValueError("skipped liveness must have no evidence")
         liveness_risk = 1.0
@@ -73,23 +101,23 @@ def assess_risk(
     }
     contributions = {name: value * WEIGHTS[name] for name, value in signals.items()}
     factors = [
-        {"type": name, "severity": "high" if value >= .7 else "medium" if value >= .3 else "low",
-         "weight": WEIGHTS[name], "risk": value, "contribution": contributions[name],
+        {"type": _signal_type(name, critical=critical.get(name, False), liveness_missing=liveness_missing,
+                              known_device=known_device, shared_device=shared_device,
+                              network_signal=network_signal, out_of_bounds=distance > radius,
+                              accuracy_low=accuracy_low),
+         "category": name,
+         "severity": "critical" if critical.get(name, False) else
+                     "high" if value >= .7 else "medium" if value >= .3 else "low",
+         "weight": round(contributions[name], 4), "risk": value,
          "critical": critical.get(name, False)}
         for name, value in signals.items() if value > 0 or critical.get(name, False)
     ]
+    if impossible_travel:  # A behavioral reason with no score contribution.
+        factors.append({"type": "impossible_travel", "category": "behavioral", "severity": "high",
+                        "weight": 0.0, "risk": 1.0, "critical": False})
     score = round(min(1.0, sum(contributions.values())), 4)
     status = "rejected" if any(critical.values()) or score >= .7 else "flagged" if score >= threshold else "approved"
-    reasons = [
-        ("geo_out_of_bounds", distance > radius, "high"),
-        ("device_unknown", not known_device and not shared_device, "medium"),
-        ("device_shared", shared_device, "high"),
-        ("impossible_travel", impossible_travel, "high"),
-    ]
-    for kind, present, severity in reasons:
-        if present:
-            factors.append({"type": kind, "severity": severity, "critical": False,
-                            "risk": 1.0, "weight": 0.0, "contribution": 0.0})
-            if status == "approved":
-                status = "flagged"
+    review_reason = distance > radius or not known_device or shared_device or impossible_travel
+    if status == "approved" and review_reason:
+        status = "flagged"
     return RiskDecision(score, status, factors, contributions)

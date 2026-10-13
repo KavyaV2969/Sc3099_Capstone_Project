@@ -126,7 +126,7 @@ def set_session_status(
     if session.status == "active" and previous == "scheduled":
         capture_roster(database, session)
     write_audit_log(
-        database, request, action="session_status_updated", user_id=admin.id,
+        database, request, action="session_updated", user_id=admin.id,
         resource_type="session", resource_id=session.id,
         details={"from": previous, "to": session.status},
     )
@@ -148,7 +148,7 @@ def admin_create_enrollment(
         database, student_id=str(payload.student_id), course_id=str(payload.course_id)
     )
     write_audit_log(
-        database, request, action="student_enrolled", user_id=admin.id,
+        database, request, action="enrollment_added", user_id=admin.id,
         resource_type="enrollment", resource_id=enrollment.id,
     )
     database.commit()

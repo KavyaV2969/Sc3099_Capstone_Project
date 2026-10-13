@@ -18,7 +18,7 @@ from app.audit import write_audit_log
 from app.middleware import RequestMiddleware
 from app.metrics import registry
 from app.rate_limit import redis_is_healthy
-from app.responses import SafeJSONResponse
+from app.responses import SafeJSONResponse, error_body
 from app.routers import admin, audit, auth, checkins, courses, devices, enrollments, export, sessions, stats, users
 from app.services.retention import retention_worker, run_retention_once
 
@@ -84,7 +84,7 @@ async def validation_error(_: Request, exc: RequestValidationError):
     for error in exc.errors():
         item = {key: value for key, value in error.items() if key not in {"input", "ctx"}}
         errors.append(item)
-    return SafeJSONResponse(status_code=422, content={"detail": errors})
+    return SafeJSONResponse(status_code=422, content=error_body(422, errors))
 
 
 @app.exception_handler(Exception)
@@ -98,7 +98,7 @@ async def unexpected_error(request: Request, exc: Exception):
         headers.update({"Access-Control-Allow-Origin": origin,
                         "Access-Control-Allow-Credentials": "true",
                         "Access-Control-Expose-Headers": "X-Request-ID", "Vary": "Origin"})
-    return SafeJSONResponse(status_code=500, content={"detail": "Internal server error"},
+    return SafeJSONResponse(status_code=500, content=error_body(500, "Internal server error"),
                             headers=headers)
 
 
@@ -119,7 +119,8 @@ def _audit_denial(request: Request, code: int):
 async def http_error(request: Request, exc: StarletteHTTPException):
     if exc.status_code in {401, 403, 429}:
         await run_in_threadpool(_audit_denial, request, exc.status_code)
-    return SafeJSONResponse(status_code=exc.status_code, content={"detail": exc.detail}, headers=exc.headers)
+    return SafeJSONResponse(status_code=exc.status_code, content=error_body(exc.status_code, exc.detail),
+                            headers=exc.headers)
 
 
 for router in (

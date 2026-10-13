@@ -143,9 +143,10 @@ def test_enabling_face_during_liveness_requires_retry(records, monkeypatch):
         assert failure.value.status_code == 409
 
 
-@pytest.mark.parametrize("changes,status,score", [({"risk_threshold": 0}, "flagged", .275),
-                                                 ({"venue_latitude": 1.351}, "rejected", .425),
-                                                 ({"geofence_radius_meters": .1}, "approved", .3125)])
+# The fixture's registered (keyless) device is known: 0.10 device contribution, not 0.20.
+@pytest.mark.parametrize("changes,status,score", [({"risk_threshold": 0}, "flagged", .175),
+                                                 ({"venue_latitude": 1.351}, "rejected", .325),
+                                                 ({"geofence_radius_meters": .1}, "approved", .2125)])
 def test_finalization_uses_current_scoring_settings(records, monkeypatch, changes, status, score):
     factory, ids, payload, request = records
     async def live(image):

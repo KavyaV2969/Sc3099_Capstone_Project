@@ -168,7 +168,8 @@ def update_session(session_id: UUID4, payload: SessionUpdate, request: Request,
     if session.status == "active" and previous_status == "scheduled":
         capture_roster(database, session)
     write_audit_log(database, request, action="session_updated", user_id=current_user.id,
-                    resource_type="session", resource_id=session.id)
+                    resource_type="session", resource_id=session.id,
+                    details={"fields": sorted(changes), "from": previous_status, "to": session.status})
     database.commit()
     return session_response(database.execute(session_query().where(Session.id == session.id)).one())
 

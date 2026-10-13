@@ -15,7 +15,8 @@ def capture_roster(database: Session, session: AttendanceSession) -> None:
         # Never reconstruct attendance history from today's enrollment after a reset.
         resets = database.scalars(select(AuditLog).where(
             AuditLog.resource_id == session.id, AuditLog.resource_type == "session",
-            AuditLog.action == "session_status_updated"))
+            # Older rows used "session_status_updated" for the same admin override.
+            AuditLog.action.in_(("session_updated", "session_status_updated"))))
         if (as_utc(session.checkin_closes_at) < utc_now()
             or any(isinstance(event.details, dict) and event.details.get("from") in {"active", "closed", "cancelled"}
                    for event in resets)
@@ -66,7 +67,7 @@ def create_enrollment(database: Session, *, student_id: str, course_id: str,
     if existing is not None:
         if existing.is_active:
             raise HTTPException(status_code=400, detail="student already enrolled")
-        existing.is_active = True
+        existing.is_active, existing.dropped_at = True, None
         if student.is_active:
             include_in_active_rosters(database, student_id, course_id)
         return existing

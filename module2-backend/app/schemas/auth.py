@@ -64,6 +64,10 @@ class RefreshTokenRequest(MutationModel):
     refresh_token: str = Field(min_length=1)
 
 
+class LogoutRequest(MutationModel):
+    refresh_token: str | None = Field(default=None, min_length=1)
+
+
 class UserProfileUpdate(MutationModel):
     full_name: str | None = Field(default=None, min_length=1, max_length=255)
     camera_consent: bool | None = None

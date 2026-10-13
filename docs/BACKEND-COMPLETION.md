@@ -1,5 +1,11 @@
 # Backend completion register
 
+> **Historical engineering log (September 2026).** Current behavior and every deviation
+> from the school's documents are listed in [BACKEND-DEVIATIONS.md](BACKEND-DEVIATIONS.md);
+> where this log disagrees (for example its "approved public contract reductions",
+> null statistics, the tenth-attempt lockout response or the absent `risk_signals` table),
+> BACKEND-DEVIATIONS.md is current.
+
 Implementation baseline: 29 September 2026; current working tree includes the
 earlier database/verification repairs. No existing integration data is reset.
 Authority remains Grading > Security > API > recommended design > PDFs except for the explicit user-approved public contract reductions below.

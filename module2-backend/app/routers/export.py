@@ -16,7 +16,7 @@ from app.audit import write_audit_log
 from app.db import get_db
 from app.dependencies import require_roles
 from app.models import Checkin, Session as AttendanceSession, User, utc_now
-from app.services.reporting import attendance, business_day, session_filters, MAX_CHECKINS, MAX_SESSIONS
+from app.services.reporting import attendance, business_day, current_rosters, session_filters, MAX_CHECKINS, MAX_SESSIONS
 from app.responses import SafeJSONResponse
 from app.schemas import ExportFormat, UserRole, as_utc
 from app.services.access import get_course, get_session, require_course_access, require_session_access
@@ -117,7 +117,8 @@ def export_session(session_id: UUID4, request: Request, format: ExportFormat = E
     rows = _rows(database.get_bind(), query)
     records = list(database.scalars(select(Checkin).where(Checkin.session_id == session.id,
         Checkin.scheduled_deletion_at > utc_now()).limit(MAX_CHECKINS + 1)))
-    summary = attendance(session, records)
+    summary = attendance(session, records,
+                         fallback=current_rosters(database, [session.course_id]).get(session.course_id))
     coverage["denominator_available"] = summary["denominator_available"]
     write_audit_log(database, request, action="data_exported", user_id=user.id,
                     resource_type="session", resource_id=session.id,

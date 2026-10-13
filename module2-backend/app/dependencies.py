@@ -10,6 +10,7 @@ from app.db import get_db
 from app.config import get_settings
 from app.models import User
 from app.rate_limit import enforce_user_api_limit
+from app.revocation import is_revoked
 from app.schemas import TokenType, UserRole
 from app.security import InvalidTokenError, decode_token
 
@@ -28,6 +29,8 @@ def get_current_user(
         payload = decode_token(credentials.credentials, TokenType.ACCESS)
     except InvalidTokenError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid access token") from exc
+    if is_revoked(credentials.credentials):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="access token has been revoked")
 
     user = database.get(User, payload.sub)
     if user is not None:

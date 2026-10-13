@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import HTTPException
 from sqlalchemy import select
 
-from app.models import Checkin, Session as AttendanceSession, utc_now
+from app.models import Checkin, Enrollment, Session as AttendanceSession, User, utc_now
 from app.schemas import as_utc
 
 SINGAPORE = timezone(timedelta(hours=8))
@@ -64,15 +64,43 @@ def load_report(database, course_ids, start=None, end=None, *, student_id=None):
     return sessions, checkins, coverage
 
 
-def attendance(session, checkins, *, now=None):
+def current_rosters(database, course_ids) -> dict[str, set[str]]:
+    """Currently eligible students per course (active student, active enrollment)."""
+    rows = database.execute(select(Enrollment.course_id, Enrollment.student_id)
+        .join(User, User.id == Enrollment.student_id)
+        .where(Enrollment.course_id.in_(list(course_ids)), Enrollment.is_active.is_(True),
+               User.is_active.is_(True), User.role == "student"))
+    rosters: dict[str, set[str]] = {}
+    for course_id, student_id in rows:
+        rosters.setdefault(course_id, set()).add(student_id)
+    return rosters
+
+
+def roster_known(session, *, now=None) -> bool:
+    """A retained snapshot exists for an opened, uncancelled session."""
     now = now or utc_now()
-    known = (session.attendance_roster is not None and session.status != "cancelled"
-             and as_utc(session.checkin_opens_at) <= now
-             and as_utc(session.checkin_opens_at) >= now - timedelta(days=30))
-    roster = set(session.attendance_roster or [])
+    return (session.attendance_roster is not None and session.status != "cancelled"
+            and as_utc(session.checkin_opens_at) <= now
+            and as_utc(session.checkin_opens_at) >= now - timedelta(days=30))
+
+
+def effective_roster(session, fallback=None, *, now=None) -> set[str]:
+    """The snapshot when known; otherwise the course's current eligible enrollment.
+
+    Sessions never activated, not yet open, cancelled or with legacy unknown
+    history still report numeric attendance instead of null.
+    """
+    return set(session.attendance_roster) if roster_known(session, now=now) else set(fallback or ())
+
+
+def attendance(session, checkins, *, fallback=None, now=None):
+    now = now or utc_now()
+    known = roster_known(session, now=now)
+    roster = effective_roster(session, fallback, now=now)
     approved = {c.student_id for c in checkins if c.status == "approved" and c.student_id in roster
                 and as_utc(c.scheduled_deletion_at) > now}
-    return {"total_enrolled": len(roster) if known else None,
-            "approved_attendance": len(approved) if known else None,
-            "attendance_rate": rate(len(approved), len(roster)) if known else None,
-            "denominator_available": known}
+    return {"total_enrolled": len(roster),
+            "approved_attendance": len(approved),
+            "attendance_rate": rate(len(approved), len(roster)),
+            "denominator_available": known,
+            "denominator_source": "roster_snapshot" if known else "current_enrollment"}

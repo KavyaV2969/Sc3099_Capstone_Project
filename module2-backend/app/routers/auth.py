@@ -4,18 +4,21 @@ from datetime import datetime, timezone
 from hashlib import sha256
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.audit import write_audit_log
 from app.db import get_db
+from app.dependencies import bearer_scheme, get_current_user
 from app.models import User, Device
 from app.services.enrollments import include_in_active_rosters
 from app.rate_limit import enforce_login_limit, enforce_registration_limit, enforce_user_api_limit
 from app.schemas import LoginRequest, LoginResponse, RefreshTokenRequest, TokenPairResponse, TokenType, UserRegister, UserResponse, UserRole
 from app.security import InvalidTokenError, create_access_token, create_refresh_token, decode_token, hash_password, verify_password
-from app.schemas.auth import ActivationRequest
+from app.schemas.auth import ActivationRequest, LogoutRequest
+from app.revocation import is_revoked, revoke_token
 from app.schemas import as_utc
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
@@ -90,8 +93,8 @@ def login(
             success=False,
         )
         database.commit()
-        if blocked:
-            raise HTTPException(status_code=429, detail="account is blocked; contact an administrator")
+        # The tenth failure is still a failed password (401); it blocks the account,
+        # and only further attempts receive 429 (coordinator clarification 1).
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid credentials")
     if not user.is_active:
         write_audit_log(
@@ -153,9 +156,40 @@ def refresh(
         token = decode_token(payload.refresh_token, TokenType.REFRESH)
     except InvalidTokenError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid refresh token") from exc
+    if is_revoked(payload.refresh_token):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="refresh token has been revoked")
 
     user = database.get(User, token.sub)
     if user is None or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="account is unavailable")
     enforce_user_api_limit(user.id)
     return _token_pair(user)
+
+
+@router.post("/logout")
+def logout(
+    request: Request,
+    payload: LogoutRequest | None = None,
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    current_user: User = Depends(get_current_user),
+    database: Session = Depends(get_db),
+) -> dict:
+    """Revoke the presented access token and, if supplied, the caller's refresh token."""
+    refresh_token = payload.refresh_token if payload else None
+    refresh = None
+    if refresh_token is not None:
+        try:
+            refresh = decode_token(refresh_token, TokenType.REFRESH)
+        except InvalidTokenError as exc:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid refresh token") from exc
+        if refresh.sub != current_user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="refresh token belongs to another account")
+    # get_current_user has already validated this access token.
+    revoke_token(credentials.credentials, decode_token(credentials.credentials, TokenType.ACCESS).exp)
+    if refresh is not None:
+        revoke_token(refresh_token, refresh.exp)
+    write_audit_log(database, request, action="logout", user_id=current_user.id,
+                    resource_type="user", resource_id=current_user.id,
+                    details={"refresh_token_revoked": refresh is not None})
+    database.commit()
+    return {"message": "Logged out successfully"}

@@ -88,6 +88,18 @@ def test_unknown_and_shared_devices_flag_low_scores():
     assert shared.status == "flagged" and "device_shared" in types and "device_unknown" not in types
 
 
+def test_factor_types_follow_schema_signal_names_and_weights_sum_to_score():
+    decision = _plain_risk(distance=150, location_accuracy=None, known_device=False,
+                           liveness_requested=True, network_risk=.8, network_signal="tor_detected")
+    types = {f["type"]: f for f in decision.factors}
+    assert {"liveness_missing", "device_unknown", "tor_detected", "geo_out_of_bounds"} <= set(types)
+    assert sum(f["weight"] for f in decision.factors) == pytest.approx(decision.score)
+    assert _plain_risk(location_accuracy=None, distance=10).factors[-1]["type"] == "geo_accuracy_low"
+    assert _plain_risk(distance=50).factors[-1]["type"] == "geo_distance"
+    with pytest.raises(ValueError):
+        _plain_risk(network_signal="not_a_signal")
+
+
 def test_requested_but_missing_liveness_is_maximum_liveness_risk():
     skipped = _plain_risk(liveness_requested=True)
     assert skipped.contributions["liveness"] == .25

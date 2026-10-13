@@ -16,7 +16,7 @@ from app.audit import write_audit_log
 from app.db import get_db
 from app.dependencies import get_current_user, require_roles
 from app.face_service import check_liveness, verify_face
-from app.models import Checkin, Course, Device, Enrollment, Session as AttendanceSession, User, utc_now
+from app.models import Checkin, Course, Device, Enrollment, RiskSignal, Session as AttendanceSession, User, utc_now
 from app.rate_limit import client_ip, enforce_checkin_limit
 from app.risk import POLICY, assess_risk
 from app.metrics import checkin_attempts, checkin_success, checkin_outcomes
@@ -93,9 +93,14 @@ async def _biometrics(policy: VerificationPolicy, payload: CheckinCreate) -> tup
     return live_passed, live_score, face_passed, face_score
 
 
-def _locked(database: Session, model, *conditions):
-    """Refresh the identity map as well as acquiring a PostgreSQL row lock."""
-    return database.scalar(select(model).where(*conditions).with_for_update()
+def _locked(database: Session, model, *conditions, shared: bool = False):
+    """Refresh the identity map as well as acquiring a PostgreSQL row lock.
+
+    ``shared`` (FOR SHARE) still blocks concurrent writers of the row but lets any
+    number of check-ins read it at once; an exclusive lock on the shared course and
+    session rows would serialize a whole class checking in at the same moment.
+    """
+    return database.scalar(select(model).where(*conditions).with_for_update(read=shared)
                            .execution_options(populate_existing=True))
 
 
@@ -142,8 +147,8 @@ def _finalize(policy: VerificationPolicy, biometric: tuple, payload: CheckinCrea
             raise HTTPException(status_code=401, detail="account is unavailable")
         if current_user.role != "student":
             raise HTTPException(status_code=403, detail="insufficient permissions")
-        course = _locked(database, Course, Course.id == policy.course_id)
-        session = _locked(database, AttendanceSession, AttendanceSession.id == session_id)
+        course = _locked(database, Course, Course.id == policy.course_id, shared=True)
+        session = _locked(database, AttendanceSession, AttendanceSession.id == session_id, shared=True)
         if session is None:
             raise HTTPException(status_code=404, detail="session not found")
         if (session.course_id != policy.course_id
@@ -177,8 +182,10 @@ def _finalize(policy: VerificationPolicy, biometric: tuple, payload: CheckinCrea
     distance = haversine_distance(payload.latitude, payload.longitude,
                                   session.venue_latitude, session.venue_longitude)
     live_passed, live_score, face_passed, face_score = biometric
-    network_hint = bool(re.search(r"\b(?:vpn|proxy|tunnel|tor)\b",
-                       request.headers.get("user-agent", ""), re.IGNORECASE))
+    hint = re.search(r"\b(vpn|proxy|tunnel|tor)\b", request.headers.get("user-agent", ""), re.IGNORECASE)
+    network_hint = hint is not None
+    network_signal = {"tor": "tor_detected", "proxy": "proxy_detected"}.get(
+        hint[1].lower() if hint else "", "vpn_detected")
     # Any retained, non-rejected attempt is evidence of where the student claimed to be.
     previous = database.scalar(select(Checkin).where(Checkin.student_id == user_id,
         Checkin.status != "rejected", Checkin.scheduled_deletion_at > utc_now())
@@ -205,7 +212,8 @@ def _finalize(policy: VerificationPolicy, biometric: tuple, payload: CheckinCrea
             known_device=device is not None, trusted_device=bool(proof and device.is_trusted),
             local_network=True, network_risk=.8 if network_hint else 0,
             impossible_travel=travel, threshold=session.risk_threshold,
-            liveness_requested=session.require_liveness_check, shared_device=shared_device)
+            liveness_requested=session.require_liveness_check, shared_device=shared_device,
+            network_signal=network_signal)
     except ValueError:
         _reject(database, request, user_id, session_id, 503, "verification evidence unavailable")
     now = utc_now()
@@ -230,6 +238,11 @@ def _finalize(policy: VerificationPolicy, biometric: tuple, payload: CheckinCrea
     except HTTPException as exc:
         database.rollback()
         _reject(database, request, user_id, session_id, exc.status_code, str(exc.detail))
+    database.add_all(RiskSignal(checkin_id=checkin.id, signal_type=factor["type"], severity=factor["severity"],
+                                weight=factor["weight"], detected_at=now,
+                                details={"category": factor["category"], "risk": factor["risk"],
+                                         "critical": factor["critical"]})
+                     for factor in decision.factors)
     write_audit_log(database, request, action=f"checkin_{decision.status}", user_id=current_user.id,
                     resource_type="checkin", resource_id=checkin.id, device_id=checkin.device_id,
                     details={"risk_score": decision.score, "policy": POLICY,

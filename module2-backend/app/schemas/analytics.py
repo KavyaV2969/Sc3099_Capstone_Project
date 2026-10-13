@@ -13,7 +13,7 @@ class CountByDay(BaseModel):
 
 class RateByDay(BaseModel):
     date: date
-    rate: float | None
+    rate: float
 
 
 class OverviewTrends(BaseModel):
@@ -27,7 +27,7 @@ class OverviewStatistics(BaseModel):
     active_sessions: int
     total_checkins_today: int
     total_checkins_week: int
-    average_attendance_rate: float | None
+    average_attendance_rate: float
     flagged_pending_review: int
     approval_rate: float
     average_risk_score: float
@@ -59,10 +59,10 @@ class SessionStatistics(BaseModel):
     course_code: str
     scheduled_start: datetime
     status: str
-    total_enrolled: int | None
-    approved_attendance: int | None = None
+    total_enrolled: int
+    approved_attendance: int = 0
     checked_in: int
-    attendance_rate: float | None
+    attendance_rate: float
     by_status: dict[str, int]
     average_risk_score: float
     average_distance_meters: float
@@ -90,7 +90,7 @@ class CourseSessionStatistics(BaseModel):
     session_id: UUID4
     name: str
     date: date
-    attendance_rate: float | None
+    attendance_rate: float
     checked_in: int
 
 
@@ -99,14 +99,14 @@ class StudentAttendanceStatistics(BaseModel):
     student_id: UUID4
     student_name: str
     sessions_attended: int
-    attendance_rate: float | None
+    attendance_rate: float
     average_risk_score: float
 
 
 class LowAttendanceAlert(BaseModel):
     student_id: UUID4
     student_name: str
-    attendance_rate: float | None
+    attendance_rate: float
     sessions_missed: int
 
 
@@ -117,7 +117,7 @@ class CourseStatistics(BaseModel):
     course_name: str
     total_sessions: int
     total_enrolled: int
-    overall_attendance_rate: float | None
+    overall_attendance_rate: float
     sessions: list[CourseSessionStatistics]
     student_attendance: list[StudentAttendanceStatistics]
     low_attendance_alerts: list[LowAttendanceAlert]
@@ -125,14 +125,14 @@ class CourseStatistics(BaseModel):
 
     @computed_field
     @property
-    def average_attendance_rate(self) -> float | None:
+    def average_attendance_rate(self) -> float:
         return self.overall_attendance_rate
 
 
 class StudentCourseStatistics(BaseModel):
     course_id: UUID4
     course_code: str
-    attendance_rate: float | None
+    attendance_rate: float
     sessions_attended: int
     total_sessions: int
     average_risk_score: float
@@ -170,9 +170,7 @@ class StudentStatistics(BaseModel):
 
     @computed_field
     @property
-    def attendance_rate(self) -> float | None:
-        if not self.coverage.get("denominator_available", False):
-            return None
+    def attendance_rate(self) -> float:
         return round(self.attended_sessions / self.total_sessions, 4) if self.total_sessions else 0.0
 
     @computed_field
