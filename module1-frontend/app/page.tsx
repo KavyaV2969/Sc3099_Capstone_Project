@@ -16,6 +16,8 @@ import { api } from "@/lib/api";
 import { AppShell } from "@/components/ui/layout/AppShell";
 import type { Session } from "@/lib/types";
 
+const SKIP_FACE_GATE = process.env.NEXT_PUBLIC_SKIP_FACE_GATE === "true";
+
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: "2-digit" });
 }
@@ -29,6 +31,7 @@ function canCheckIn(session: Session): boolean {
 
 export default function Home() {
   const router = useRouter();
+  console.log("SKIP_FACE_GATE =", SKIP_FACE_GATE);
   const [checked, setChecked] = useState(false);
   const [faceEnrolled, setFaceEnrolled] = useState<boolean | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -60,9 +63,26 @@ export default function Home() {
         }
       }
 
-      setFaceEnrolled(user.face_enrolled);
+      // setFaceEnrolled(user.face_enrolled);
 
-      if (user.face_enrolled) {
+      // if (user.face_enrolled) {
+      //   try {
+      //     const { data: sessionData } = await api.get<Session[]>("/sessions/my-sessions");
+      //     const activeSessions = sessionData.filter((s) => s.status === "active");
+      //     setSessions(activeSessions);
+      //     await cacheSessions(activeSessions);
+      //   } catch (networkErr) {
+      //     const cached = await getCachedSessions();
+      //     if (cached) {
+      //       setSessions(cached);
+      //     }
+      //   }
+      // }
+
+      // to remove: bypass face registration
+      setFaceEnrolled(user.face_enrolled || SKIP_FACE_GATE);
+
+      if (user.face_enrolled || SKIP_FACE_GATE) {
         try {
           const { data: sessionData } = await api.get<Session[]>("/sessions/my-sessions");
           const activeSessions = sessionData.filter((s) => s.status === "active");
@@ -127,12 +147,13 @@ export default function Home() {
                 key={session.id}
                 className="card-panel !max-w-none text-left disabled:opacity-60 disabled:cursor-not-allowed hover:shadow-md transition-shadow"
                 disabled={!canCheckIn(session)}
+                onClick={() => router.push(`/checkin?session=${session.id}`)}
               >
                 <p className="text-sm text-gray-500">{session.course_code}</p>
                 <h2 className="text-lg font-semibold">{session.course_name}</h2>
                 <p className="text-sm text-gray-600">{session.venue_name}</p>
                 <p className="text-sm font-medium text-blue-600 mt-4">
-                  {canCheckIn(session) ? "Tap to check in" : "Not open"}
+                  {canCheckIn(session) ? "Check in" : "Not open"}
                 </p>
               </button>
             ))}
