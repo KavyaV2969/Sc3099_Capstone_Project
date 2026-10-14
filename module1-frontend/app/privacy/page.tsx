@@ -3,12 +3,17 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { AppShell } from "@/components/ui/layout/AppShell";
+import { getDeviceId } from "@/lib/device";
+import type { Device } from "@/lib/types";
 
 export default function PrivacyPage() {
   const [cameraConsent, setCameraConsent] = useState(false);
   const [locationConsent, setLocationConsent] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [devices, setDevices] = useState<Device[]>([]);
+  const [devicesLoading, setDevicesLoading] = useState(true);
+  const [thisDeviceId, setThisDeviceId] = useState("");
 
   useEffect(() => {
     async function loadConsent() {
@@ -23,6 +28,21 @@ export default function PrivacyPage() {
       }
     }
     loadConsent();
+  }, []);
+
+  useEffect(() => {
+    setThisDeviceId(getDeviceId());
+    async function loadDevices() {
+      try {
+        const { data } = await api.get<Device[]>("/devices/my-devices");
+        setDevices(data.filter((d) => d.is_active));
+      } catch (err: any) {
+        setError(err?.response?.data?.detail ?? "Failed to load your devices.");
+      } finally {
+        setDevicesLoading(false);
+      }
+    }
+    loadDevices();
   }, []);
 
   async function handleCameraToggle(checked: boolean) {
@@ -95,6 +115,38 @@ export default function PrivacyPage() {
                   Used to confirm you&apos;re physically present when you
                   check in.
                 </p>
+              </div>
+
+              <div className="card-panel !max-w-none mb-6">
+                <h2 className="text-lg font-semibold mb-3">Your devices</h2>
+                  {devicesLoading ? (
+                    <p className="text-gray-500">Loading devices...</p>
+                  ) : devices.length === 0 ? (
+                    <p className="text-sm text-gray-500">
+                      No devices yet. This browser is added the first time you check in.
+                    </p>
+                  ) : (
+                    devices.map((d) => (
+                      <div key={d.id} className="card-panel !max-w-none mb-3">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-semibold">{d.device_name ?? "Unnamed device"}</span>
+                          {d.device_fingerprint === thisDeviceId && (
+                            <span className="text-xs bg-blue-100 text-blue-700 rounded-full px-2 py-0.5">
+                              This device
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm text-gray-600 capitalize">
+                          {d.platform ?? "unknown"} · {d.is_trusted ? "Trusted" : "Not trusted"}
+                        </p>
+                        <p className="text-sm text-gray-500">
+                          Last used: {d.last_seen_at ? new Date(d.last_seen_at).toLocaleString() : "never"}
+                          {" · "}
+                          {d.total_checkins} check-ins
+                        </p>
+                      </div>
+                    ))
+                  )}
               </div>
             </>
           )}

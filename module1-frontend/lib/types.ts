@@ -25,3 +25,15 @@ export interface Enrollment {
   is_active: boolean;
   enrolled_at: string;
 }
+
+export interface Device {
+  id: string;
+  device_fingerprint: string;
+  device_name: string | null;
+  platform: string | null;
+  is_trusted: boolean;
+  is_active: boolean;
+  first_seen_at: string;
+  last_seen_at: string | null;
+  total_checkins: number;
+}
