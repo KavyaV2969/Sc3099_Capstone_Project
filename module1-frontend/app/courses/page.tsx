@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { AppShell } from "@/components/ui/layout/AppShell";
 import type { Enrollment } from "@/lib/types";
+import Link from "next/link";
 
 export default function CoursesPage() {
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
@@ -33,7 +34,11 @@ export default function CoursesPage() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {enrollments.map((enrollment) => (
-          <div key={enrollment.id} className="card-panel !max-w-none">
+          <Link
+            key={enrollment.id}
+            href={`/courses/${enrollment.course_id}`}
+            className="card-panel !max-w-none block hover:shadow-md transition-shadow"
+          >
             <p className="text-sm text-gray-500">{enrollment.course_code}</p>
             <h2 className="text-lg font-semibold">{enrollment.course_name}</h2>
             <p className="text-sm text-gray-600 mt-1">{enrollment.semester}</p>
@@ -43,7 +48,8 @@ export default function CoursesPage() {
             {!enrollment.is_active && (
               <p className="text-xs text-red-500 mt-2">Enrollment inactive</p>
             )}
-          </div>
+          </Link>
+          
         ))}
 
         {!loading && enrollments.length === 0 && (

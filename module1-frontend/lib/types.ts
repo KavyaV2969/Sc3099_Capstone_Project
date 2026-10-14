@@ -37,3 +37,21 @@ export interface Device {
   last_seen_at: string | null;
   total_checkins: number;
 }
+
+export interface Checkin {
+  id: string;
+  session_id: string;
+  checked_in_at: string;
+  status: "approved" | "flagged" | "rejected" | "appealed";
+  risk_score: number;
+  distance_from_venue_meters: number;
+  location_accuracy_meters: number | null;
+  liveness_passed: boolean | null;
+  face_match_passed: boolean | null;
+  risk_factors: { type: string }[];
+  review_notes: string | null;
+  appeal_reason: string | null;
+  appealed_at: string | null;
+  session_name: string | null;
+  course_code: string | null;
+}
