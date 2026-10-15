@@ -61,7 +61,8 @@ def assess_risk(
     ``require_liveness`` means liveness evidence was evaluated; ``liveness_requested``
     means the session asked for it. Requested-but-missing evidence is maximum
     liveness risk, as in the recommended integration guide, never a free pass.
-    Review reasons (outside geofence, unknown/shared device, impossible travel)
+    Review reasons (outside geofence, unknown/shared device, impossible travel,
+    requested liveness not performed)
     flag an otherwise approved check-in without adding a rejection rule.
 
     Each factor's ``weight`` is its contribution to the score (as in the API
@@ -117,7 +118,9 @@ def assess_risk(
                         "weight": 0.0, "risk": 1.0, "critical": False})
     score = round(min(1.0, sum(contributions.values())), 4)
     status = "rejected" if any(critical.values()) or score >= .7 else "flagged" if score >= threshold else "approved"
-    review_reason = distance > radius or not known_device or shared_device or impossible_travel
+    # Skipping a liveness check the session requires must never auto-approve.
+    review_reason = (distance > radius or not known_device or shared_device or impossible_travel
+                     or liveness_missing)
     if status == "approved" and review_reason:
         status = "flagged"
     return RiskDecision(score, status, factors, contributions)

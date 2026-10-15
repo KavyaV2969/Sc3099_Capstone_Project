@@ -11,7 +11,7 @@ from app.db import get_db
 from app.dependencies import require_roles
 from app.models import Checkin, Course, Enrollment, User, utc_now
 from app.services.reporting import (attendance, business_day, current_rosters, effective_roster,
-                                    load_report, rate, roster_known, MAX_CHECKINS)
+                                    load_report, load_sessions, rate, roster_known, MAX_CHECKINS)
 from app.schemas import (CourseStatistics, OverviewStatistics, SessionStatistics,
                          StudentStatistics, UserRole, as_utc)
 from app.services.access import accessible_course_ids, get_course, get_session, require_course_access, require_session_access
@@ -35,26 +35,49 @@ def overview(course_id: UUID4 | None = None, days: int = Query(default=7, ge=1, 
         course = get_course(database, str(course_id))
         require_course_access(database, course, user, allow_ta=False, read_only=True)
         ids = [course.id]
-    sessions, checkins, coverage = load_report(database, ids)
-    grouped = _group(sessions, checkins)
+    sessions, coverage = load_sessions(database, ids)
+    # Aggregate per session in SQL rather than loading every check-in: the overview
+    # spans all readable courses, so a row-loading report would hit its size cap.
+    retained = (Checkin.session_id.in_([s.id for s in sessions]), Checkin.scheduled_deletion_at > utc_now())
+    counts = {row.session_id: row for row in database.execute(select(
+        Checkin.session_id, func.count().label("total"),
+        func.sum(case((Checkin.status == "approved", 1), else_=0)).label("approved"),
+        func.sum(case((Checkin.status.in_(("flagged", "appealed")), 1), else_=0)).label("review"),
+        func.sum(case((Checkin.risk_score >= .5, 1), else_=0)).label("high_risk"),
+        func.sum(Checkin.risk_score).label("risk"),
+    ).where(*retained).group_by(Checkin.session_id))}
+    approved_students: dict[str, set[str]] = {}
+    for session_id, student_id in database.execute(
+            select(Checkin.session_id, Checkin.student_id).where(*retained, Checkin.status == "approved")):
+        approved_students.setdefault(session_id, set()).add(student_id)
+
+    def count(session_id, field):
+        row = counts.get(session_id)
+        return (getattr(row, field) or 0) if row else 0
+
     fallback = current_rosters(database, {s.course_id for s in sessions})
-    summaries = {s.id: attendance(s, grouped[s.id], fallback=fallback.get(s.course_id)) for s in sessions}
+    summaries = {}
+    for s in sessions:  # Same definition as attendance(): approved students within the roster.
+        roster = effective_roster(s, fallback.get(s.course_id))
+        summaries[s.id] = {"approved_attendance": len(approved_students.get(s.id, set()) & roster),
+                           "total_enrolled": len(roster)}
     today = business_day(utc_now())
+    session_days = {s.id: business_day(s.scheduled_start) for s in sessions}
     daily = {}
     for session in sessions:
-        day = business_day(session.scheduled_start)
+        day = session_days[session.id]
         if day < today - timedelta(days=min(days, 30) - 1):
             continue
         item = daily.setdefault(day, {"count": 0, "approved": 0, "slots": 0})
         summary = summaries[session.id]
-        item["count"] += len(grouped[session.id])
+        item["count"] += count(session.id, "total")
         item["approved"] += summary["approved_attendance"]
         item["slots"] += summary["total_enrolled"]
-    total = len(checkins)
-    approved = sum(c.status == "approved" for c in checkins)
+    total = sum(count(s.id, "total") for s in sessions)
+    approved = sum(count(s.id, "approved") for s in sessions)
+    risk_sum = sum(count(s.id, "risk") for s in sessions)
     slots = sum(item["total_enrolled"] for item in summaries.values())
     trusted_approved = sum(item["approved_attendance"] for item in summaries.values())
-    session_days = {s.id: business_day(s.scheduled_start) for s in sessions}
     visible_courses = select(Course.id).where(Course.is_active.is_(True), Course.id.in_(ids))
     total_courses = database.scalar(select(func.count()).select_from(visible_courses.subquery())) or 0
     total_students = database.scalar(select(func.count(func.distinct(Enrollment.student_id)))
@@ -62,13 +85,14 @@ def overview(course_id: UUID4 | None = None, days: int = Query(default=7, ge=1, 
             Enrollment.is_active.is_(True), User.is_active.is_(True), User.role == "student")) or 0
     return {"total_sessions": len(sessions), "active_sessions": sum(s.status == "active" for s in sessions),
         "total_courses": total_courses, "total_students": total_students,
-        "total_checkins_today": sum(session_days[c.session_id] == today for c in checkins),
-        "total_checkins_week": sum(session_days[c.session_id] >= today - timedelta(days=6) for c in checkins),
+        "total_checkins_today": sum(count(s.id, "total") for s in sessions if session_days[s.id] == today),
+        "total_checkins_week": sum(count(s.id, "total") for s in sessions
+                                   if session_days[s.id] >= today - timedelta(days=6)),
         "average_attendance_rate": rate(trusted_approved, slots),
-        "flagged_pending_review": sum(c.status in {"flagged", "appealed"} for c in checkins),
+        "flagged_pending_review": sum(count(s.id, "review") for s in sessions),
         "approval_rate": rate(approved, total),
-        "average_risk_score": round(sum(c.risk_score for c in checkins) / total, 4) if total else 0,
-        "high_risk_checkins_today": sum(session_days[c.session_id] == today and c.risk_score >= .5 for c in checkins),
+        "average_risk_score": round(risk_sum / total, 4) if total else 0,
+        "high_risk_checkins_today": sum(count(s.id, "high_risk") for s in sessions if session_days[s.id] == today),
         "coverage": coverage,
         "trends": {"checkins_by_day": [{"date": day, "count": v["count"]} for day, v in sorted(daily.items())],
                    "attendance_rate_by_day": [{"date": day, "rate": rate(v["approved"], v["slots"])}

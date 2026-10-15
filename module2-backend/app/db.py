@@ -9,12 +9,16 @@ from app.config import get_settings
 from app.schema_contract import inspect_readiness
 
 settings = get_settings()
+# Recommended pool (size 10, overflow 20). Request threads are capped at this capacity
+# (see main.lifespan), so a burst queues for a thread instead of timing out on the pool.
+POOL_SIZE, MAX_OVERFLOW = 10, 20
+POOL_CAPACITY = POOL_SIZE + MAX_OVERFLOW
 engine = create_engine(
     settings.database_url,
     pool_pre_ping=True,
-    pool_size=10,
-    max_overflow=20,
-    pool_timeout=5,
+    pool_size=POOL_SIZE,
+    max_overflow=MAX_OVERFLOW,
+    pool_timeout=30,
     connect_args={"connect_timeout": 10} if settings.database_url.startswith("postgresql") else {},
 )
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)

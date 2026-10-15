@@ -72,7 +72,7 @@ from or extends the school documents, the reason is recorded in
   failure or GPS beyond twice the geofence rejects; risk >= 0.70 rejects; risk >= the
   session threshold flags. Outside the geofence, unregistered or shared devices and
   impossible travel also flag for review. Session-requested liveness without a usable
-  image counts as maximum liveness risk. Clients must read `status` rather than treat
+  image counts as maximum liveness risk and is flagged. Clients must read `status` rather than treat
   every 201 as approved.
 - **Roles.** Instructors and TAs read attendance for every course; session changes need
   ownership, and reviews need a teaching relationship or an admin-assigned TA

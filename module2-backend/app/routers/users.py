@@ -83,8 +83,9 @@ def list_users(
     if is_active is not None:
         filters.append(User.is_active.is_(is_active))
     if search:
-        pattern = f"%{search.strip()}%"
-        filters.append(or_(User.full_name.ilike(pattern), User.email.ilike(pattern)))
+        term = search.strip()  # Literal match: % and _ are not wildcards (as in roster search).
+        filters.append(or_(User.full_name.icontains(term, autoescape=True),
+                           User.email.icontains(term, autoescape=True)))
     total = database.scalar(select(func.count()).select_from(User).where(*filters)) or 0
     items = database.scalars(
         select(User).where(*filters).order_by(User.created_at.desc()).limit(limit).offset(offset)

@@ -34,7 +34,7 @@ treated private ranges as VPN indicators.
 | Course list | `GET /courses/` requires auth | `test_performance` calls it without a token | Course list is public metadata. Course detail and all course changes still require auth. |
 | Flagged queue | `GET /checkins/flagged` returns an array | `test_observability` reads `items`/`total` | Paginated envelope `{items, total, limit, offset}`; items are full check-in records. |
 | Consent before check-in | Briefing: camera and geolocation consent "must be TRUE before check-in" | Fixtures check in freshly registered students, whose consents default to false | Submitting coordinates counts as consent for that attempt only; the stored preference is unchanged. Camera consent is still required for face enrollment, face matching and liveness. |
-| Liveness required by the session | Spec: liveness failure rejects | Fixture sessions require liveness but send no image and expect 201 | No usable image (or no camera consent) skips the call and adds the full liveness risk (0.25, factor `liveness_missing`). A liveness check that runs and fails still rejects. |
+| Liveness required by the session | Spec: liveness failure rejects | Fixture sessions require liveness but send no image and expect 201 (approved, flagged or pending) | No usable image (or no camera consent) skips the call, adds the full liveness risk (0.25, factor `liveness_missing`) and flags the check-in for review, so skipping the face check never auto-approves. A liveness check that runs and fails still rejects. |
 | Device registration | Schema: `public_key` NOT NULL | Fixture registers without a key and adds a `browser` field | `public_key` is optional and validated when supplied; unknown fields are ignored. |
 | Instructor read scope | Instructor reads are for taught courses / enrolled students | Observability tests query stats and rosters as an unrelated instructor | Any instructor can read any course's statistics, rosters, check-ins and exports, and any student's statistics. Writes (sessions, enrollments, reviews) still need ownership or a teaching relationship. |
 | Response field names | Spec field names | Tests use other names | Both are returned: overview `today_checkins`, `flagged_pending`, `total_courses`, `total_students`; session `checked_in_count`, `approved_count`, `flagged_count`; course `average_attendance_rate`, `flagged_checkins`; student `total_enrolled_courses`, `total_sessions`, `attended_sessions`, `attendance_rate`, `recent_sessions`; session JSON export `session_id`, `records`. |
@@ -51,6 +51,7 @@ treated private ranges as VPN indicators.
   Risk at or above 0.70 is always `rejected` (the "CRITICAL: auto-reject" band). Risk at or
   above the session threshold: `flagged`. Otherwise `approved`, except that these review
   reasons flag an otherwise approved check-in:
+  - a liveness check required by the session that was not performed;
   - outside the geofence;
   - an unregistered device;
   - a device fingerprint registered to another account (proxy sign-in);
@@ -181,4 +182,14 @@ reachability only; `/health/schema` performs the full schema verification.
   first check-in. Unregistered devices are flagged for review.
 - Network detection is a heuristic; the IP country check uses registry data (section 1).
 - Activation links must be delivered by staff; there is no email delivery.
+- **Open role registration.** `POST /auth/register` accepts any role, including `admin`, as
+  the Briefing instructs ("ignore security restrictions about the roles during
+  registration") and as the public tests rely on. For any real deployment, registration
+  must ignore `role` and create students only; roles would then be assigned by an admin
+  (`PATCH /users/{id}`).
+- **Lockout as denial of service.** Because the graded lockout is per account (clarification
+  1), anyone who knows an email address can block that account with ten wrong passwords,
+  including an administrator's. An admin unblocks accounts with
+  `PATCH /admin/users/{id}/activate`. If every admin is blocked, an operator can reset
+  `users.failed_login_attempts` to 0 in the database.
 - Full OpenTelemetry tracing is not implemented. Prometheus metrics are exposed at `/metrics`.

@@ -15,7 +15,7 @@ from app.db import get_db
 from app.dependencies import require_roles
 from app.services.access import get_course, require_course_access
 from app.models import Course, Enrollment, User, utc_now
-from app.security import hash_password
+from app.security import UNUSABLE_PASSWORD
 from app.schemas import (BulkEnrollmentCreate, BulkEnrollmentResponse, CourseEnrollmentsResponse,
                          EnrollmentCreate, EnrollmentResponse, MyEnrollmentResponse, UserRole)
 from app.services.enrollments import create_enrollment as create_enrollment_record
@@ -128,7 +128,7 @@ def bulk_enroll(
                             token = token_urlsafe(32)
                             expiry = utc_now() + timedelta(hours=24)
                             student = User(email=email, full_name=email.split("@", 1)[0], role="student",
-                                           hashed_password=hash_password(token_urlsafe(32)), is_active=False,
+                                           hashed_password=UNUSABLE_PASSWORD, is_active=False,
                                            activation_token_hash=sha256(token.encode()).hexdigest(),
                                            activation_expires_at=expiry)
                             database.add(student)

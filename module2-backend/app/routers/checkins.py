@@ -27,7 +27,7 @@ from app.services.devices import verify_proof, consume_proof
 from app.utils.geolocation import haversine_distance, ip_is_in_singapore, is_in_singapore
 
 router = APIRouter(prefix="/checkins", tags=["checkins"])
-REVIEW_REASONS = {"geo_out_of_bounds", "device_unknown", "device_shared", "impossible_travel"}
+REVIEW_REASONS = {"geo_out_of_bounds", "device_unknown", "device_shared", "impossible_travel", "liveness_missing"}
 
 
 def _reject(database: Session, request: Request, user_id: str, session_id: str, code: int, detail: str,

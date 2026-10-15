@@ -45,13 +45,20 @@ def session_filters(start=None, end=None, *, scheduled_dates=True):
     return filters, coverage
 
 
-def load_report(database, course_ids, start=None, end=None, *, student_id=None):
+def load_sessions(database, course_ids, start=None, end=None):
+    """Retained, eligible sessions of the given courses in the reporting window."""
     filters, coverage = session_filters(start, end)
     sessions = list(database.scalars(select(AttendanceSession).where(
         AttendanceSession.course_id.in_(course_ids), *filters)
         .order_by(AttendanceSession.scheduled_start, AttendanceSession.id).limit(MAX_SESSIONS + 1)))
     if len(sessions) > MAX_SESSIONS:
         raise HTTPException(status_code=422, detail="report exceeds 1000 sessions; narrow the date range")
+    coverage["denominator_available"] = all(s.attendance_roster is not None for s in sessions)
+    return sessions, coverage
+
+
+def load_report(database, course_ids, start=None, end=None, *, student_id=None):
+    sessions, coverage = load_sessions(database, course_ids, start, end)
     query = select(Checkin).where(Checkin.session_id.in_([s.id for s in sessions]),
                                   Checkin.scheduled_deletion_at > utc_now())
     if student_id is not None:
@@ -60,7 +67,6 @@ def load_report(database, course_ids, start=None, end=None, *, student_id=None):
         .order_by(Checkin.checked_in_at, Checkin.id).limit(MAX_CHECKINS + 1)))
     if len(checkins) > MAX_CHECKINS:
         raise HTTPException(status_code=422, detail="report exceeds 10000 check-ins; narrow the date range")
-    coverage["denominator_available"] = all(s.attendance_roster is not None for s in sessions)
     return sessions, checkins, coverage
 
 

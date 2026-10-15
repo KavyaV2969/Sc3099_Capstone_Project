@@ -2,7 +2,6 @@
 
 import asyncio
 import logging
-import secrets
 from datetime import datetime, timezone, timedelta
 
 from sqlalchemy import delete, select, update, text, or_
@@ -12,7 +11,7 @@ from app.config import Settings
 from app.db import SessionLocal
 from app.models import Checkin, Device, Session as AttendanceSession, User
 from app.metrics import retention_runs, retention_last_success, retention_records
-from app.security import hash_password
+from app.security import UNUSABLE_PASSWORD
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +32,8 @@ def cleanup_expired_records(database: Session, *, now: datetime | None = None) -
         delete(Checkin).where(Checkin.scheduled_deletion_at <= deadline)
     ).rowcount or 0
     database.execute(update(AttendanceSession).where(
-        AttendanceSession.checkin_closes_at <= deadline - timedelta(days=30)).values(attendance_roster=None))
+        AttendanceSession.checkin_closes_at <= deadline - timedelta(days=30),
+        AttendanceSession.attendance_roster.is_not(None)).values(attendance_roster=None))
     database.execute(update(User).where(User.activation_expires_at <= deadline).values(
         activation_token_hash=None, activation_expires_at=None))
     users = database.scalars(
@@ -46,7 +46,7 @@ def cleanup_expired_records(database: Session, *, now: datetime | None = None) -
         database.execute(delete(Device).where(Device.user_id == user.id))
         user.email = f"deleted-{user.id}@deleted.invalid"
         user.full_name = "Deleted User"
-        user.hashed_password = hash_password(secrets.token_urlsafe(32))
+        user.hashed_password = UNUSABLE_PASSWORD
         user.role = "student"
         user.is_active = False
         user.failed_login_attempts = 0

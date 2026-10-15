@@ -1,19 +1,23 @@
 """SAIV backend application assembly."""
 
 import asyncio
+import functools
 import logging
 from contextlib import asynccontextmanager, contextmanager
 
+from anyio import to_thread
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
+from fastapi.routing import APIRoute
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.concurrency import run_in_threadpool
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+from sqlalchemy.orm import Session as DatabaseSession
 
 from app.config import get_settings
-from app.db import database_is_reachable, database_readiness, get_db
+from app.db import POOL_CAPACITY, database_is_reachable, database_readiness, get_db
 from app.audit import write_audit_log
 from app.middleware import RequestMiddleware
 from app.metrics import registry
@@ -37,6 +41,9 @@ schema_status = "unchecked"
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     global schema_status
+    # Sync endpoints run on AnyIO worker threads (default 40). Never run more of them
+    # than the pool has connections, or bursts wait on the pool and fail with 503.
+    to_thread.current_default_thread_limiter().total_tokens = POOL_CAPACITY
     stop = asyncio.Event()
     worker = None
     readiness = await asyncio.to_thread(database_readiness) if settings.retention_cleanup_enabled else None
@@ -129,6 +136,28 @@ for router in (
     devices.router, export.router,
 ):
     app.include_router(router, prefix=settings.api_v1_prefix)
+
+
+def _end_transaction_before_response(call):
+    """FastAPI validates a sync endpoint's response on a worker thread. A session still
+    holding a connection then (e.g. after commit + refresh) would wait for a thread while
+    every thread waits for a connection, a pool-timeout deadlock under bursts. Writes are
+    already committed, so end the remaining read transaction here; serialization reloads
+    any attribute it needs."""
+    @functools.wraps(call)
+    def endpoint(*args, **kwargs):
+        try:
+            return call(*args, **kwargs)
+        finally:
+            for value in kwargs.values():
+                if isinstance(value, DatabaseSession) and value.in_transaction():
+                    value.rollback()
+    return endpoint
+
+
+for route in app.routes:
+    if isinstance(route, APIRoute) and not asyncio.iscoroutinefunction(route.dependant.call):
+        route.dependant.call = _end_transaction_before_response(route.dependant.call)
 
 
 @app.get("/metrics", include_in_schema=False)
