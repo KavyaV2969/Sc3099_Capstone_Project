@@ -3,3 +3,7 @@
 
 # Locally generated or working documentation
 docs/
+
+#pycache 
+__pycache__/
+*.pyc

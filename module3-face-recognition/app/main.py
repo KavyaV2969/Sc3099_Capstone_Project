@@ -17,15 +17,69 @@ Recommended Libraries:
 - NumPy: Numerical operations
 """
 
+import base64
+import numpy as np
+import mediapipe as mp
+import threading
+import cv2
+import torch
+from facenet_pytorch import InceptionResnetV1
+from io import BytesIO
+from PIL import Image
 from fastapi import FastAPI, HTTPException
+from fastapi.concurrency import run_in_threadpool 
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 from pydantic import BaseModel
 from typing import Optional, Dict, List, Any
+
+#### CONFIGURATIONS 
+
+FACENET_INPUT_SIZE = 160
+FACE_CROP_MARGIN = 0.15
+EMBEDDING_DIM = 512
+
+SIMHASH_SEED = 3099
+SIMHASH_BITS = 256
+PLANES = np.random.default_rng(SIMHASH_SEED).standard_normal((SIMHASH_BITS, EMBEDDING_DIM))
+
+ENROLL_MIN_CONFIDENCE = 0.7
+ENROLL_MIN_QUALITY = 0.5
+
+MATCH_THRESHOLD = 0.7
+MATCH_HAMMING_THRESHOLD = 60
+
+MAX_IMAGE_BYTES = 10*1024*1024 #image above 10MB size to be rejected 
+MIN_FACE_SIZE_PX = 40 #facenet reqs 160x160 so if face size in pixels is too small, the embedding would be inaccurate 
+
+
+# =============================================================================
+# MODEL LOADING ON APP STARTUP
+# =============================================================================
+
+facenet_model: Optional[InceptionResnetV1] = None
+facenet_lock = threading.Lock()
+
+def get_facenet_model() -> InceptionResnetV1:
+    global facenet_model
+    if facenet_model is None:
+        with facenet_lock:
+            if facenet_model is None: 
+                facenet_model = InceptionResnetV1(pretrained="vggface2").eval()
+    return facenet_model
+
+@asynccontextmanager
+async def lifespan(app : FastAPI):
+    print("lifespan: loading facenet!")
+    get_facenet_model()
+    print("lifespan: facenet ready!")
+    yield
 
 app = FastAPI(
     title="SAIV Face Recognition Service",
     description="Face enrollment, verification, liveness detection, and risk scoring service",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan= lifespan
 )
 
 app.add_middleware(
@@ -45,7 +99,7 @@ class FaceEnrollRequest(BaseModel):
     """Request model for face enrollment."""
     user_id: str
     image: str  # Base64 encoded image
-    camera_consent: bool = False
+    camera_consent: bool 
 
 
 class FaceEnrollResponse(BaseModel):
@@ -70,6 +124,17 @@ class FaceVerifyResponse(BaseModel):
     face_detected: bool
     current_template_hash: str
 
+class FaceMatchRequest(BaseModel):
+    """Request model for face verification."""
+    image: str  # Base64 encoded image
+    reference_hash: str  # Hash from enrollment
+
+
+class FaceMatchResponse(BaseModel):
+    """Response model for face verification."""
+    match_passed: bool
+    match_score: float  # 0.0 to 1.0
+    face_embedding_hash: str
 
 class LivenessRequest(BaseModel):
     """Request model for liveness check."""
@@ -121,7 +186,7 @@ class RiskAssessResponse(BaseModel):
 @app.get("/health")
 async def health_check():
     """Basic health check endpoint."""
-    return {"status": "healthy"}
+    return {"status": "healthy", "service": "SAIV Face Recognition & Risk Service"}
 
 
 @app.get("/")
@@ -130,14 +195,14 @@ async def root():
     return {
         "service": "SAIV Face Recognition & Risk Service",
         "version": "1.0.0",
-        "endpoints": [
-            "GET /health - Health check",
-            "POST /face/enroll - Enroll a face for verification",
-            "POST /face/verify - Verify a face against enrolled template",
-            "POST /face/match - Legacy face matching (use /face/verify)",
-            "POST /liveness/check - Perform liveness detection",
-            "POST /risk/assess - Multi-signal risk assessment"
-        ]
+        "endpoints": {
+            "/health": "GET - Health check",
+            "/face/enroll": "POST - Enroll a face for verification",
+            "/face/verify":"POST - Verify a face against enrolled template",
+            "/face/match": "POST - Legacy face matching (use /face/verify)",
+            "/liveness/check":"POST - Perform liveness detection",
+            "/risk/assess":"POST - Multi-signal risk assessment"
+        }
     }
 
 
@@ -168,8 +233,21 @@ async def enroll_face(request: FaceEnrollRequest):
     - Quality score >= 0.5
     - Returns 64-char SHA-256 hex hash
     """
-    # TODO: Implement face enrollment
-    raise HTTPException(status_code=501, detail="Not implemented")
+    if not request.camera_consent:
+        raise HTTPException(status_code=400, detail="Camera consent required!")
+
+    result = await run_in_threadpool(process_enrollment, request.image)
+
+    return FaceEnrollResponse(
+        enrollment_successful = True, 
+        face_template_hash = result["face_template_hash"],
+        quality_score = result["quality_score"],
+        details = {
+            "face_detected" : True,
+            "face_detection_confidence" : result["confidence"],
+            "image_quality" : result["image_quality"]
+        }
+    )
 
 
 # =============================================================================
@@ -194,17 +272,41 @@ async def verify_face(request: FaceVerifyRequest):
     Note: Hash comparison alone gives binary match. For continuous
     scores, consider perceptual hashing or embedding similarity.
     """
-    # TODO: Implement face verification
-    raise HTTPException(status_code=501, detail="Not implemented")
+    if not is_valid_template_hash(request.reference_template_hash):
+        raise HTTPException(status_code=400, detail= "Invalid reference_template_hash (expected 64 hex characters)")
+
+    result = await run_in_threadpool(
+        process_verification, request.image, request.reference_template_hash
+    )
+
+    return FaceVerifyResponse(
+        match_passed=result["match_passed"],
+        match_score=result["match_score"],
+        match_threshold=result["match_threshold"],
+        face_detected=result["face_detected"],
+        current_template_hash=result["current_template_hash"]
+
+    )
 
 
-@app.post("/face/match")
-async def match_face(request: FaceVerifyRequest):
+@app.post("/face/match", response_model = FaceMatchResponse)
+async def match_face(request: FaceMatchRequest):
     """
     Legacy face matching endpoint. Redirects to /face/verify.
     Kept for backwards compatibility.
     """
-    return await verify_face(request)
+    verify_result = await verify_face(
+        FaceVerifyRequest(
+            image = request.image,
+            reference_template_hash=request.reference_hash
+        )
+    )
+
+    return FaceMatchResponse(
+        match_passed=verify_result.match_passed,
+        match_score= verify_result.match_score,
+        face_embedding_hash= verify_result.current_template_hash
+    )
 
 
 # =============================================================================
@@ -311,8 +413,24 @@ def decode_base64_image(base64_string: str):
 
     Handle errors gracefully (invalid base64, corrupt image, etc.)
     """
-    pass
-
+    try :
+        img_bytes = base64.b64decode(base64_string)
+    except Exception:
+        return None
+    
+    if len(img_bytes) > MAX_IMAGE_BYTES:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Image too large ({len(img_bytes) / 1024 / 1024:.1f} MB, "
+                f"max {MAX_IMAGE_BYTES // 1024 // 1024} MB)"
+            ),
+        )
+    try:
+        img = Image.open(BytesIO(img_bytes)).convert("RGB")
+        return np.array(img)
+    except Exception as e:
+        return None
 
 def detect_face(image_array):
     """
@@ -326,9 +444,73 @@ def detect_face(image_array):
 
     Consider setting min_detection_confidence=0.5
     """
-    pass
+    mp_face_detection = mp.solutions.face_detection
+    with mp_face_detection.FaceDetection(model_selection = 1, min_detection_confidence = 0.5) as face_detection:
+        results = face_detection.process(image_array)
+
+        if not results.detections:
+            return {"detected" : False, "confidence" : 0.0}
+
+        detection = results.detections[0]
+        confidence = detection.score[0]
+
+        return {"detected" : True, "confidence" : confidence, "bounding_box" : detection.location_data.relative_bounding_box} 
 
 
+def bbox_to_pixels(bbox, width: int, height: int):
+    # keep in mind bounding box can return value outside [0,1] if face runs off the edge of frame
+    x0 = min(max(0, int(bbox.xmin * width)), width)
+    y0 = min(max(0, int(bbox.ymin * height)), height)
+    x1 = min(width, max(x0, int((bbox.xmin + bbox.width) * width)))
+    y1 = min(height, max(y0, int((bbox.ymin + bbox.height) * height)))
+    return x0,y0,x1,y1
+
+def compute_quality_score(confidence: float, image_array, bbox) -> float:
+    #formula and weightage
+    #detection confidence (50%), image res relative to 640x480 (20%), face size relative to the frame(30%) -> if 15% or more of the frame is face size, then full marks 
+    h,w = image_array.shape[:2]
+
+    res_score = min(1.0, (w * h) / (640 * 480))
+    size_score = min(1.0, (bbox.width * bbox.height) / 0.15)
+
+    quality_score = 0.5 * confidence + 0.2 * res_score + 0.3 * size_score
+    return round(min(1.0, max(0.0, quality_score)), 2)
+
+def image_quality_label(quality_score: float) -> str:
+    if quality_score >= 0.75:
+        return "good"
+    if quality_score >= ENROLL_MIN_QUALITY:
+        return "acceptable"
+    return "poor"
+
+def crop_for_facenet(image_array, detection) -> np.ndarray:
+    h,w = image_array.shape[:2]
+    x0,y0,x1,y1 = bbox_to_pixels(detection["bounding_box"], w ,h)
+    face_width, face_height= x1 - x0, y1 - y0
+
+    if face_width < MIN_FACE_SIZE_PX or face_height < MIN_FACE_SIZE_PX:
+        raise ValueError(f"Face too small ({face_width}x{face_height}px)")
+
+    pad_x = int(face_width * FACE_CROP_MARGIN)
+    pad_y = int(face_height * FACE_CROP_MARGIN)
+    crop_left = max(0, x0 - pad_x)
+    crop_top = max(0, y0 - pad_y)
+    crop_right = min(w, x1 + pad_x)
+    crop_bottom = min(h, y1 + pad_y)
+
+    face_crop = image_array[crop_top:crop_bottom, crop_left:crop_right]
+    if face_crop.size == 0:
+        raise ValueError("Empty face crop!")
+
+    interpolation = (
+        cv2.INTER_AREA if face_crop.shape[0] > FACENET_INPUT_SIZE else cv2.INTER_LINEAR
+    )
+
+    return cv2.resize(
+        face_crop, (FACENET_INPUT_SIZE, FACENET_INPUT_SIZE), interpolation = interpolation
+    )
+
+    
 def extract_face_embedding(image_array, detection):
     """
     Extract face embedding/features for hashing.
@@ -340,7 +522,16 @@ def extract_face_embedding(image_array, detection):
 
     Return numpy array that can be hashed.
     """
-    pass
+    face = crop_for_facenet(image_array, detection)
+    face = (face.astype(np.float32) - 127.5) / 128.0
+    tensor = torch.from_numpy(face).permute(2, 0, 1).unsqueeze(0)
+
+    with torch.no_grad():
+        embedding = facenet_model(tensor)
+
+    return embedding[0].numpy()
+
+
 
 
 def generate_face_hash(embedding) -> str:
@@ -352,7 +543,111 @@ def generate_face_hash(embedding) -> str:
     - embedding.tobytes() or embedding.tostring()
     - Return 64-character hex string
     """
-    pass
+    embedding = np.asarray(embedding, dtype=np.float64).reshape(-1)
+    if embedding.shape[0] != EMBEDDING_DIM:
+        raise ValueError(f"embedding dim {embedding.shape[0]} != configured {EMBEDDING_DIM}")
+    if not np.isfinite(embedding).all():
+        raise ValueError(f"embedding contains NaN/inf")
+
+    bits = (PLANES @ embedding) > 0
+    return np.packbits(bits).tobytes().hex()
+
+def process_enrollment(image_b64 : str) -> dict:
+    image_array = None
+    embedding = None
+
+    try:
+        image_array = decode_base64_image(image_b64)
+        if image_array is None:
+            raise HTTPException(status_code=400, detail="Invalid image data!")
+
+        detection = detect_face(image_array)
+        if not detection["detected"]:
+            raise HTTPException(status_code=400, detail="No face detected")
+
+        confidence = detection["confidence"]
+        bbox = detection["bounding_box"]
+
+        quality_score = compute_quality_score(confidence, image_array, bbox)
+        if confidence < ENROLL_MIN_CONFIDENCE or quality_score < ENROLL_MIN_QUALITY:
+            raise HTTPException(status_code=400, detail=(
+                "Face image quality too low for enrollment "
+                f"(confidence {confidence:.2f}, quality {quality_score:.2f})"
+            ))
+
+        try:
+            embedding = extract_face_embedding(image_array, detection)
+            template_hash = generate_face_hash(embedding)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"Could not process face: {e}")
+
+        return{
+            "face_template_hash" : template_hash,
+            "quality_score" : quality_score,
+            "confidence" : round(confidence, 2),
+            "image_quality" : image_quality_label(quality_score)
+        }
+        
+    finally:
+        del image_array
+        del embedding
+
+def is_valid_template_hash(template_hash: str) -> bool:
+    return(
+        len(template_hash) == SIMHASH_BITS / 4 and all(x in "0123456789abcdefABCDEF" for x in template_hash)
+    )
+
+def hamming_distance(hash_a: str , hash_b: str) -> int:
+    return bin(int(hash_a, 16) ^ int(hash_b, 16)).count("1")
+
+def hamming_to_match_score(distance: int) -> float:
+    if distance <= MATCH_HAMMING_THRESHOLD:
+        score = 1.0 - (1.0 - MATCH_THRESHOLD) * distance / MATCH_HAMMING_THRESHOLD
+    else:
+        random_level = SIMHASH_BITS / 2
+        score = MATCH_THRESHOLD * (random_level - distance) / (random_level - MATCH_HAMMING_THRESHOLD)
+    return round(min(1.0, max(0.0, score)), 2)
+
+def process_verification(image_b64: str, reference_hash: str) -> dict:
+    image_array = None
+    embedding = None
+
+    try:
+        image_array = decode_base64_image(image_b64)
+        if image_array is None:
+            raise HTTPException(status_code=400, detail="Invalid image data!")
+
+        detection = detect_face(image_array)
+        if not detection["detected"]:
+            return{
+                "match_passed" : False,
+                "match_score" : 0.0, 
+                "match_threshold" : MATCH_THRESHOLD,
+                "face_detected" : False,
+                "current_template_hash" : "",
+            }
+        try:
+            embedding = extract_face_embedding(image_array, detection)
+            current_hash = generate_face_hash(embedding)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"Could not process face: {e}")
+
+        distance = hamming_distance(current_hash, reference_hash)
+        match_score = hamming_to_match_score(distance)
+
+        return{
+                "match_passed" : match_score >= MATCH_THRESHOLD,
+                "match_score" : match_score, 
+                "match_threshold" : MATCH_THRESHOLD,
+                "face_detected" : True,
+                "current_template_hash" : current_hash,
+        }
+    finally:
+        del image_array
+        del embedding
+
+
+
 
 
 def analyze_face_mesh(image_array):
@@ -398,7 +693,28 @@ def detect_vpn_proxy(ip_address: str, user_agent: str) -> tuple:
 
     Return (is_vpn: bool, confidence: float)
     """
-    pass
+    is_vpn = False
+    confidence = 0.0
+
+    if ip_address:
+        # Private IP ranges (common VPN indicators)
+        if (ip_address.startswith('10.') or
+            ip_address.startswith('192.168.') or
+            ip_address.startswith('172.16.') or
+            ip_address.startswith('172.17.') or
+            ip_address.startswith('172.18.') or
+            ip_address.startswith('172.19.')):
+            is_vpn = True
+            confidence = 0.7
+
+    if user_agent:
+        vpn_keywords = ['vpn', 'proxy', 'tunnel', 'tor']
+        if any(kw in user_agent.lower() for kw in vpn_keywords):
+            is_vpn = True
+            confidence = max(confidence, 0.8)
+
+    return is_vpn, confidence
+
 
 
 # =============================================================================
