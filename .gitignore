@@ -11,3 +11,9 @@ docs/*
 
 # Local scratch: test runs, recovery evidence and private PostgreSQL backups.
 tmp/
+# Locally generated or working documentation
+docs/
+
+#pycache 
+__pycache__/
+*.pyc
