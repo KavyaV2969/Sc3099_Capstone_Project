@@ -160,7 +160,7 @@ function CheckinContent() {
         longitude: location.longitude,
         location_accuracy_meters: location.accuracy,
         device_fingerprint: fingerprint,
-        liveness_challenge_response: photo ?? undefined,
+        liveness_challenge_response: photo ? photo.split(",")[1] : undefined,
       });
       setResult(data);
       setPhoto(null); // don't keep the image after submitting

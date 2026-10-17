@@ -83,7 +83,7 @@ export default function EnrollFacePage() {
     setIsSubmitting(true);
     setError("");
     try {
-      const { data } = await api.post("/users/me/face/enroll", { image: imageDataUrl });
+      const { data } = await api.post("/users/me/face/enroll", { image: imageDataUrl.split(",")[1] });
       setResult(data);
     } catch (err: any) {
       setError(err?.response?.data?.detail ?? "Face enrollment failed. Please try again.");
