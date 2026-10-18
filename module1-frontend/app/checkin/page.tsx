@@ -20,6 +20,13 @@ function errorText(err: any, fallback: string): string {
   return typeof detail === "string" ? detail : fallback;
 }
 
+const CHALLENGES = [
+  "Blink twice",
+  "Turn your head slightly left",
+  "Turn your head slightly right",
+  "Smile",
+];
+
 function CheckinContent() {
   const router = useRouter();
   const sessionId = useSearchParams().get("session");
@@ -34,6 +41,8 @@ function CheckinContent() {
   const [photo, setPhoto] = useState<string | null>(null);
   const [location, setLocation] = useState<LocationFix | null>(null);
   const [locating, setLocating] = useState(false);
+  const [challenge, setChallenge] = useState<string | null>(null);
+  const [countdown, setCountdown] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<CheckinResult | null>(null);
   const [error, setError] = useState("");
@@ -120,6 +129,24 @@ function CheckinContent() {
     setPhoto(canvas.toDataURL("image/jpeg", 0.9));
     stopCamera(); // release the camera as soon as the photo is taken
   }
+
+  function startChallenge() {
+    setChallenge(CHALLENGES[Math.floor(Math.random() * CHALLENGES.length)]);
+    setCountdown(3);
+  }
+
+  useEffect(() => {
+    if (countdown === null) return;
+    if (countdown === 0) {
+      takePhoto(); // auto-capture at the end of the countdown
+      setCountdown(null);
+      setChallenge(null);
+      return;
+    }
+    const t = setTimeout(() => setCountdown(countdown - 1), 1000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [countdown]);  
 
   async function handleGetLocation() {
     setLocating(true);
@@ -228,11 +255,23 @@ function CheckinContent() {
                       Start Camera
                     </button>
                   )}
-                  {streamActive && (
-                    <button className="btn-primary" onClick={takePhoto}>
-                      Take Photo
-                    </button>
-                  )}
+                  {streamActive &&
+                    (session?.require_liveness_check ? (
+                      countdown === null ? (
+                        <button className="btn-primary" onClick={startChallenge}>
+                          Start liveness check
+                        </button>
+                      ) : (
+                        <div className="text-center">
+                          <p className="font-semibold">{challenge}</p>
+                          <p className="text-3xl font-bold">{countdown}</p>
+                        </div>
+                      )
+                    ) : (
+                      <button className="btn-primary" onClick={takePhoto}>
+                        Take Photo
+                      </button>
+                    ))}
                   {photo && (
                     <button
                       className="btn-secondary"
