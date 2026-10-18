@@ -14,7 +14,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { AppShell } from "@/components/ui/layout/AppShell";
-import type { Session } from "@/lib/types";
+import type { Session, Checkin } from "@/lib/types";
 
 const SKIP_FACE_GATE = process.env.NEXT_PUBLIC_SKIP_FACE_GATE === "true";
 
@@ -34,6 +34,7 @@ export default function Home() {
   console.log("SKIP_FACE_GATE =", SKIP_FACE_GATE);
   const [checked, setChecked] = useState(false);
   const [faceEnrolled, setFaceEnrolled] = useState<boolean | null>(null);
+  const [checkinStatus, setCheckinStatus] = useState<Record<string, string>>({});
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -76,6 +77,14 @@ export default function Home() {
           if (cached) {
             setSessions(cached);
           }
+        }
+        try {
+          const { data: mine } = await api.get<Checkin[]>("/checkins/my-checkins", {
+            params: { limit: 100 },
+          });
+          setCheckinStatus(Object.fromEntries(mine.map((c) => [c.session_id, c.status])));
+        } catch {
+          // offline or failed: cards just won't show the checked-in state
         }
       }
 
@@ -143,14 +152,18 @@ export default function Home() {
               <button
                 key={session.id}
                 className="card-panel !max-w-none text-left disabled:opacity-60 disabled:cursor-not-allowed hover:shadow-md transition-shadow"
-                disabled={!canCheckIn(session)}
+                disabled={!canCheckIn(session) || !!checkinStatus[session.id]}
                 onClick={() => router.push(`/checkin?session=${session.id}`)}
               >
                 <p className="text-sm text-gray-500">{session.course_code}</p>
                 <h2 className="text-lg font-semibold">{session.course_name}</h2>
                 <p className="text-sm text-gray-600">{session.venue_name}</p>
-                <p className="text-sm font-medium text-blue-600 mt-4">
-                  {canCheckIn(session) ? "Check in" : "Not open"}
+                <p className="text-sm font-medium text-blue-600 mt-4 capitalize">
+                  {checkinStatus[session.id]
+                    ? `Checked in · ${checkinStatus[session.id]}`
+                    : canCheckIn(session)
+                    ? "Tap to check in"
+                    : "Not open yet"}
                 </p>
               </button>
             ))}

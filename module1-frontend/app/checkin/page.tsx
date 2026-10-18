@@ -4,7 +4,7 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { getLocationFix, type LocationFix } from "@/lib/geolocation";
-import { registerDevice } from "@/lib/device";
+import { registerDevice, signCheckin } from "@/lib/device";
 import { AppShell } from "@/components/ui/layout/AppShell";
 import type { Session } from "@/lib/types";
 
@@ -180,15 +180,24 @@ function CheckinContent() {
     setSubmitting(true);
     setError("");
     try {
-      const fingerprint = await registerDevice();
-      const { data } = await api.post<CheckinResult>("/checkins/", {
+      const { id: deviceId, fingerprint } = await registerDevice();
+      const body = {
         session_id: sessionId,
         latitude: location.latitude,
         longitude: location.longitude,
         location_accuracy_meters: location.accuracy,
         device_fingerprint: fingerprint,
         liveness_challenge_response: photo ? photo.split(",")[1] : undefined,
-      });
+      };
+
+      let proof = null;
+      try {
+        proof = await signCheckin(deviceId, body);
+      } catch (err: any) {
+        if (err?.response?.status !== 404) throw err; // 404 = this backend has no challenge route
+      }
+
+      const { data } = await api.post<CheckinResult>("/checkins/", { ...body, ...proof });
       setResult(data);
       setPhoto(null); // don't keep the image after submitting
     } catch (err: any) {

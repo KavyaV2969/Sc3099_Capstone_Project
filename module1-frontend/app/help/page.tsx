@@ -38,10 +38,9 @@ const faqs = [
 export default function HelpPage() {
   return (
     <AppShell>
-      <div className="flex justify-center pt-12">
+      <div className="flex justify-center">
         <div className="max-w-md w-full">
           <h1 className="text-2xl font-bold mb-6">Help</h1>
-
           <h2 className="text-lg font-semibold mb-3">Frequently asked questions</h2>
           {faqs.map((f) => (
             <details key={f.q} className="card-panel !max-w-none mb-3">

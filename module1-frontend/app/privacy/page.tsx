@@ -67,14 +67,22 @@ export default function PrivacyPage() {
     }
   }
 
+  async function handleRemoveDevice(id: string) {
+  if (!confirm("Remove this device? You'll need an admin to trust it again after your next check-in.")) return;
+  try {
+    await api.delete(`/devices/${id}`);
+    setDevices((prev) => prev.filter((d) => d.id !== id));
+  } catch (err: any) {
+    setError(err?.response?.data?.detail ?? "Failed to remove the device.");
+  }
+}
+
   return (
     <AppShell>
-      <div className="flex justify-center pt-12">
+      <div className="flex justify-center">
         <div className="max-w-md w-full">
           <h1 className="text-2xl font-bold mb-6">Privacy & Security</h1>
-
           {error && <div className="alert-error">{error}</div>}
-
           {loading ? (
             <p className="text-gray-500">Loading...</p>
           ) : (
@@ -141,6 +149,12 @@ export default function PrivacyPage() {
                         </p>
                         <p className="text-sm text-gray-500">
                           Last used: {d.last_seen_at ? new Date(d.last_seen_at).toLocaleString() : "never"}
+                          <button
+                            className="text-red-600 underline text-sm mt-2"
+                            onClick={() => handleRemoveDevice(d.id)}
+                          >
+                            Remove
+                          </button>
                           {" · "}
                           {d.total_checkins} check-ins
                         </p>
