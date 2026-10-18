@@ -46,6 +46,7 @@ export default function PrivacyPage() {
   }, []);
 
   async function handleCameraToggle(checked: boolean) {
+    if (!checked && !confirm("Turning off camera access will delete your registered face. You'll need to register it again.")) return;
     setCameraConsent(checked);
     setError("");
     try {
