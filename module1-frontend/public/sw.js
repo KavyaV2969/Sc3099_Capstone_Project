@@ -1,4 +1,4 @@
-const CACHE_NAME = "saiv-cache-v1";
+const CACHE_NAME = "saiv-cache-v2";
 
 const STATIC_ASSETS = [
   "/",
@@ -17,6 +17,11 @@ self.addEventListener("install", (event) => {
 });
 
 self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches.keys().then((keys) =>
+      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
+    )
+  );
   console.log("Service Worker activated");
 });
 
@@ -45,6 +50,7 @@ self.addEventListener("fetch", (event) => {
 
       return fetch(event.request)
         .then((networkResponse) => {
+          if (!networkResponse.ok) return networkResponse; // never cache 404s or 500s
           return caches.open(CACHE_NAME).then((cache) => {
             cache.put(event.request, networkResponse.clone());
             return networkResponse;

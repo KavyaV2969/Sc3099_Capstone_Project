@@ -63,24 +63,21 @@ export default function Home() {
         }
       }
 
-      // setFaceEnrolled(user.face_enrolled);
+      setFaceEnrolled(user.face_enrolled);
 
-      // if (user.face_enrolled) {
-      //   try {
-      //     const { data: sessionData } = await api.get<Session[]>("/sessions/my-sessions");
-      //     const activeSessions = sessionData.filter((s) => s.status === "active");
-      //     setSessions(activeSessions);
-      //     await cacheSessions(activeSessions);
-      //   } catch (networkErr) {
-      //     const cached = await getCachedSessions();
-      //     if (cached) {
-      //       setSessions(cached);
-      //     }
-      //   }
-      // }
-
-      // to remove: bypass face registration
-      setFaceEnrolled(user.face_enrolled || SKIP_FACE_GATE);
+      if (user.face_enrolled) {
+        try {
+          const { data: sessionData } = await api.get<Session[]>("/sessions/my-sessions");
+          const activeSessions = sessionData.filter((s) => s.status === "active");
+          setSessions(activeSessions);
+          await cacheSessions(activeSessions);
+        } catch (networkErr) {
+          const cached = await getCachedSessions();
+          if (cached) {
+            setSessions(cached);
+          }
+        }
+      }
 
       if (user.face_enrolled || SKIP_FACE_GATE) {
         try {
