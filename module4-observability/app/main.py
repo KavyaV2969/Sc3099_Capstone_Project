@@ -1,90 +1,67 @@
 """
 SAIV Instructor Dashboard - Module 4
 
-This is the skeleton implementation for the Observability module.
-Students must implement the instructor dashboard with session management,
-attendance monitoring, and metrics visualization.
+Entry point. Run with:
+    streamlit run app/main.py
+
+Everything session-related (auth, role checks, shared formatting) lives in
+auth.py / api_client.py / utils.py / metrics.py so that app/pages/*.py stay
+focused on presentation. Streamlit auto-discovers the pages/ folder next to
+this file and builds the sidebar navigation from it.
 """
+import sys
+from pathlib import Path
+
+APP_DIR = Path(__file__).resolve().parent
+if str(APP_DIR) not in sys.path:
+    sys.path.insert(0, str(APP_DIR))
 
 import streamlit as st
-import os
 
-# Page configuration
+from auth import is_authenticated, current_user, login_form, sidebar_user_box
+from config import BACKEND_URL, PROMETHEUS_URL
+
 st.set_page_config(
     page_title="SAIV Instructor Dashboard",
     page_icon="📊",
-    layout="wide"
+    layout="wide",
 )
 
-# Environment variables
-BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
-PROMETHEUS_URL = os.getenv("PROMETHEUS_URL", "http://localhost:9090")
+st.title("📊 SAIV Instructor Dashboard")
+st.caption("Secure Attendance & Identity Verification System — Observability & Admin Portal")
 
-st.title("SAIV Instructor Dashboard")
-st.write("Welcome to the Secure Attendance & Identity Verification System")
+if not is_authenticated():
+    left, right = st.columns([1, 1])
+    with left:
+        login_form()
+    with right:
+        st.subheader("What you can do here")
+        st.markdown(
+            """
+- **Overview** — today's check-in activity, approval rate, trends
+- **Sessions** — create sessions, open/close check-in windows, drill into attendance
+- **Check-ins** — filter attendance records, review the flagged/appealed queue
+- **Audit Logs** — browse the immutable security/compliance trail *(admin)*
+- **System Metrics** — API latency, request rate, service health via Prometheus
+- **Courses / Enrollments** — manage rosters and geofence settings
+- **Admin › Users** — activate/deactivate accounts, manage roles *(admin)*
+            """
+        )
+        with st.expander("Connection settings (for troubleshooting)"):
+            st.code(f"BACKEND_URL     = {BACKEND_URL}\nPROMETHEUS_URL  = {PROMETHEUS_URL}", language="text")
+            st.caption(
+                "Override these with the `BACKEND_URL` / `PROMETHEUS_URL` environment "
+                "variables — already wired up in docker-compose.yml."
+            )
+else:
+    sidebar_user_box()
+    user = current_user()
+    st.success(f"Welcome back, **{user.get('full_name', user.get('email'))}** ({user.get('role')}).")
+    st.info("👈 Pick a page from the sidebar to get started.")
 
-# =============================================================================
-# TODO: Implement the following pages/features
-# =============================================================================
-
-# -----------------------------------------------------------------------------
-# Authentication
-# -----------------------------------------------------------------------------
-# - Login form for instructors
-# - JWT token management
-# - Session persistence
-
-# -----------------------------------------------------------------------------
-# Overview Page
-# -----------------------------------------------------------------------------
-# - Total sessions (active/inactive)
-# - Total check-ins & success rate
-# - Recent check-ins table
-# - Check-ins by hour chart
-# - Verification status pie chart
-
-# -----------------------------------------------------------------------------
-# Sessions Management
-# -----------------------------------------------------------------------------
-# - View all sessions with details
-# - Create new sessions with geofence config
-# - View check-ins per session
-# - CSV export for gradebook
-
-# -----------------------------------------------------------------------------
-# Check-ins View
-# -----------------------------------------------------------------------------
-# - Filter by session, verification status
-# - Real-time updates
-# - CSV export for gradebook integration
-# - Attendance data with all signals
-
-# -----------------------------------------------------------------------------
-# Audit Logs
-# -----------------------------------------------------------------------------
-# - Browse system events
-# - Filter by event type, user, action
-# - Color-coded by severity
-# - Export audit trail
-
-# -----------------------------------------------------------------------------
-# Metrics Dashboard
-# -----------------------------------------------------------------------------
-# - API response times (p95 latency)
-# - Request rates
-# - Success rates
-# - Risk score distribution
-# - High-risk alerts
-# - System health status
-
-# =============================================================================
-# CSV Export Format
-# =============================================================================
-# Required columns:
-# - Check-in ID, Student ID, Session ID
-# - Timestamp, Verification Status
-# - Risk Score, Liveness Score, Face Match Score
-# - GPS Coordinates (latitude, longitude)
-
-# Placeholder content
-st.info("This is a skeleton implementation. Please implement the required features.")
+    cols = st.columns(4 if user.get("role") == "admin" else 3)
+    cols[0].page_link("pages/1_Overview.py", label="Overview", icon="📊")
+    cols[1].page_link("pages/2_Sessions.py", label="Sessions", icon="🗓️")
+    cols[2].page_link("pages/3_Checkins.py", label="Check-ins", icon="✅")
+    if user.get("role") == "admin":
+        cols[3].page_link("pages/5_System_Metrics.py", label="System Metrics", icon="📈")

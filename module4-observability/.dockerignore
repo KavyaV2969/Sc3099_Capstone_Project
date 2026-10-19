@@ -1,0 +1,15 @@
+# Exclude local secrets, tests and Python environments from the Docker build.
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+.pytest_cache/
+__pycache__/
+*.py[cod]
+.coverage
+htmlcov/
+tests/
+.git/
+.gitignore
+.DS_Store
