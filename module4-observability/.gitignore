@@ -1,0 +1,9 @@
+# Private local state, caches and virtual environments — never commit.
+.env
+.venv/
+.pytest_cache/
+__pycache__/
+*.py[cod]
+.coverage
+htmlcov/
+.DS_Store
