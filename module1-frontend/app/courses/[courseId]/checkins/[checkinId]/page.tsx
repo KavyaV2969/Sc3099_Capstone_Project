@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { AppShell } from "@/components/ui/layout/AppShell";
+import { cachedGet } from "@/lib/offlineData";
 import type { Checkin } from "@/lib/types";
 
 const statusStyle: Record<string, string> = {
@@ -17,6 +18,7 @@ const statusStyle: Record<string, string> = {
 const APPEAL_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 function errorText(err: any, fallback: string): string {
+  if (!err?.response) return "Can't reach the server. Appeals need a connection.";
   const detail = err?.response?.data?.detail;
   return typeof detail === "string" ? detail : fallback;
 }
@@ -29,12 +31,14 @@ export default function CheckinDetailPage() {
   const [showForm, setShowForm] = useState(false);
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [offline, setOffline] = useState(false);
 
   useEffect(() => {
     async function load() {
       try {
-        const { data } = await api.get<Checkin>(`/checkins/${checkinId}`);
+        const { data, stale } = await cachedGet<Checkin>(`/checkins/${checkinId}`);
         setCheckin(data);
+        setOffline(stale);
       } catch (err: any) {
         setError(errorText(err, "Failed to load this check-in."));
       } finally {
@@ -80,6 +84,11 @@ export default function CheckinDetailPage() {
           <h1 className="text-2xl font-bold mt-3 mb-6">Check-in result</h1>
 
           {error && <div className="alert-error">{error}</div>}
+          {offline && (
+            <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-3 text-sm mb-4">
+              You&apos;re offline. Showing saved data.
+            </div>
+          )}
           {loading && <p className="text-gray-500">Loading...</p>}
 
           {checkin && (

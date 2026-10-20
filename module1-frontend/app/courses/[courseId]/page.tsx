@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { api } from "@/lib/api";
+import { cachedGet } from "@/lib/offlineData";
+import { warmRoutes } from "@/lib/offlineStore";
 import { AppShell } from "@/components/ui/layout/AppShell";
 import type { Checkin } from "@/lib/types";
 
@@ -19,17 +20,30 @@ export default function CourseCheckinsPage() {
   const [checkins, setCheckins] = useState<Checkin[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [offline, setOffline] = useState(false);
 
   useEffect(() => {
     async function load() {
       try {
-        const { data } = await api.get<Checkin[]>("/checkins/my-checkins", {
-          params: { course_id: courseId },
+        const { data, stale } = await cachedGet<Checkin[]>("/checkins/my-checkins", {
+          course_id: courseId,
         });
         setCheckins(data);
+        setOffline(stale);
+        if (!stale) {
+          // Online: save each check-in page and its details for offline use
+          warmRoutes(data.map((c) => `/courses/${courseId}/checkins/${c.id}`));
+          data.forEach((c) => cachedGet(`/checkins/${c.id}`).catch(() => {}));
+        }
       } catch (err: any) {
         const detail = err?.response?.data?.detail;
-        setError(typeof detail === "string" ? detail : "Failed to load your check-ins.");
+        setError(
+          !err?.response
+            ? "You're offline, and this page has no saved data yet."
+            : typeof detail === "string"
+            ? detail
+            : "Failed to load your check-ins."
+        );
       } finally {
         setLoading(false);
       }
@@ -49,6 +63,11 @@ export default function CourseCheckinsPage() {
           </h1>
 
           {error && <div className="alert-error">{error}</div>}
+          {offline && (
+            <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-3 text-sm mb-4">
+              You&apos;re offline. Showing saved data.
+            </div>
+          )}
           {loading && <p className="text-gray-500">Loading...</p>}
 
           {!loading && !error && checkins.length === 0 && (
