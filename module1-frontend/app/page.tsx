@@ -16,8 +16,6 @@ import { api } from "@/lib/api";
 import { AppShell } from "@/components/ui/layout/AppShell";
 import type { Session, Checkin } from "@/lib/types";
 
-const SKIP_FACE_GATE = process.env.NEXT_PUBLIC_SKIP_FACE_GATE === "true";
-
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: "2-digit" });
 }
@@ -31,7 +29,6 @@ function canCheckIn(session: Session): boolean {
 
 export default function Home() {
   const router = useRouter();
-  console.log("SKIP_FACE_GATE =", SKIP_FACE_GATE);
   const [checked, setChecked] = useState(false);
   const [faceEnrolled, setFaceEnrolled] = useState<boolean | null>(null);
   const [checkinStatus, setCheckinStatus] = useState<Record<string, string>>({});
@@ -88,7 +85,7 @@ export default function Home() {
         }
       }
 
-      if (user.face_enrolled || SKIP_FACE_GATE) {
+      if (user.face_enrolled) {
         try {
           const { data: sessionData } = await api.get<Session[]>("/sessions/my-sessions");
           const activeSessions = sessionData.filter((s) => s.status === "active");
