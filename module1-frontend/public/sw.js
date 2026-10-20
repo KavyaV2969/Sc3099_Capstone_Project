@@ -1,65 +1,112 @@
-const CACHE_NAME = "saiv-cache-v2";
+const CACHE_NAME = "saiv-cache-v5";
 
-const STATIC_ASSETS = [
-  "/",
-];
+// Pages reachable from the sidebar. Saved at install so they open offline.
+const PAGES = ["/", "/courses", "/privacy", "/help", "/consent", "/login", "/register"];
+
+const ASSET_RE = /\/_next\/static\/[^"'\\\s<>]+\.(?:js|css)/g;
 
 function isApiRequest(url) {
   return url.includes("/api/") || url.includes(":8000");
 }
 
+// Save the scripts and styles a page needs, so it can run offline
+function storeAssets(html) {
+  const assets = Array.from(new Set(html.match(ASSET_RE) || []));
+  return caches.open(CACHE_NAME).then((cache) =>
+    Promise.all(
+      assets.map((a) => cache.match(a).then((hit) => hit || cache.add(a).catch(() => {})))
+    )
+  );
+}
+
+async function savePage(path) {
+  const res = await fetch(path);
+  if (!res.ok) return;
+  const cache = await caches.open(CACHE_NAME);
+  await cache.put(path, res.clone());
+  await storeAssets(await res.text());
+}
+
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS);
-    })
+    Promise.all(PAGES.map((p) => savePage(p).catch(() => {}))).then(() => self.skipWaiting())
   );
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
-    )
+    caches
+      .keys()
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim())
   );
-  console.log("Service Worker activated");
 });
 
-self.addEventListener("fetch", (event) => {
-  const url = event.request.url;
+async function offlinePage(request) {
+  const exact = await caches.match(request, { ignoreVary: true });
+  if (exact) return exact;
+  const path = new URL(request.url).pathname;
+  if (path.startsWith("/courses/")) {
+    const list = await caches.match("/courses", { ignoreVary: true });
+    if (list) return list;
+  }
+  return caches.match("/", { ignoreVary: true });
+}
 
-  if (event.request.method !== "GET") {
+self.addEventListener("fetch", (event) => {
+  const request = event.request;
+  const url = request.url;
+
+  if (request.method !== "GET") return;
+
+  // Backend calls always go to the network (the app handles offline itself)
+  if (isApiRequest(url)) {
+    event.respondWith(fetch(request));
     return;
   }
 
-  if (isApiRequest(url)) {
+  // Next.js data requests: let them fail, and Next then loads the full page instead
+  if (url.includes("_rsc=")) return;
+
+  const wantsHtml =
+    request.mode === "navigate" || (request.headers.get("accept") || "").includes("text/html");
+
+  if (wantsHtml) {
+    // Pages: network first, so they're never stale. The saved copy is the offline fallback.
     event.respondWith(
-      fetch(event.request).catch((err) => {
-        console.warn("API request failed (likely offline):", url);
-        throw err; // let axios see the failure so your fallback logic can handle it
-      })
+      fetch(request)
+        .then((res) => {
+          if (res.ok) {
+            const forCache = res.clone();
+            const forParse = res.clone();
+            event.waitUntil(
+              caches
+                .open(CACHE_NAME)
+                .then((c) => c.put(request, forCache))
+                .then(() => forParse.text())
+                .then(storeAssets)
+                .catch(() => {})
+            );
+          }
+          return res;
+        })
+        .catch(() => offlinePage(request))
     );
     return;
   }
 
+  // Scripts, styles, icons: saved copy first
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-
-      return fetch(event.request)
-        .then((networkResponse) => {
-          if (!networkResponse.ok) return networkResponse; // never cache 404s or 500s
-          return caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, networkResponse.clone());
-            return networkResponse;
-          });
+    caches.match(request).then(
+      (cached) =>
+        cached ||
+        fetch(request).then((res) => {
+          if (res.ok) {
+            const copy = res.clone();
+            caches.open(CACHE_NAME).then((c) => c.put(request, copy));
+          }
+          return res;
         })
-        .catch((err) => {
-          console.warn("Static asset fetch failed:", url);
-          throw err;
-        });
-    })
+    )
   );
 });

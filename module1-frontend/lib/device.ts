@@ -10,6 +10,13 @@ function randomHex(bytes: number): string {
   return Array.from(arr, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+function bytesToBase64(buf: ArrayBuffer): string {
+  const bytes = new Uint8Array(buf);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+}
+
 export function getDeviceId(): string {
   try {
     const existing = localStorage.getItem(DEVICE_KEY);
@@ -39,7 +46,7 @@ async function publicKeyPem(): Promise<string | undefined> {
   const pair = await getKeyPair();
   if (!pair) return undefined;
   const spki = await crypto.subtle.exportKey("spki", pair.publicKey);
-  const b64 = btoa(String.fromCharCode(...new Uint8Array(spki)));
+  const b64 = bytesToBase64(spki);
   return `-----BEGIN PUBLIC KEY-----\n${b64.match(/.{1,64}/g)!.join("\n")}\n-----END PUBLIC KEY-----`;
 }
 
@@ -52,10 +59,6 @@ export async function registerDevice(): Promise<{ id: string; fingerprint: strin
     public_key: await publicKeyPem(),
   });
   return { id: data.id, fingerprint };
-}
-
-function toBase64(buf: ArrayBuffer): string {
-  return btoa(String.fromCharCode(...new Uint8Array(buf)));
 }
 
 export async function signCheckin(deviceId: string, body: Record<string, unknown>) {
@@ -71,6 +74,6 @@ export async function signCheckin(deviceId: string, body: Record<string, unknown
   );
   return {
     device_challenge_id: data.challenge_id as string,
-    device_signature: toBase64(signature),
+    device_signature: bytesToBase64(signature),
   };
 }

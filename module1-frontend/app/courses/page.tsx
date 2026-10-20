@@ -5,17 +5,22 @@ import { api } from "@/lib/api";
 import { AppShell } from "@/components/ui/layout/AppShell";
 import type { Enrollment } from "@/lib/types";
 import Link from "next/link";
+import { cachedGet } from "@/lib/offlineData";
+import { warmRoutes } from "@/lib/offlineStore";
 
 export default function CoursesPage() {
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [offline, setOffline] = useState(false);
 
   useEffect(() => {
     async function loadEnrollments() {
       try {
-        const { data } = await api.get<Enrollment[]>("/enrollments/my-enrollments");
+        const { data, stale } = await cachedGet<Enrollment[]>("/enrollments/my-enrollments");
         setEnrollments(data);
+        setOffline(stale);
+        warmRoutes(data.map((e) => `/courses/${e.course_id}`));
       } catch (err: any) {
         setError(err?.response?.data?.detail ?? "Failed to load courses.");
       } finally {
@@ -28,7 +33,12 @@ export default function CoursesPage() {
   return (
     <AppShell>
       <h1 className="text-2xl font-bold mb-6">Courses</h1>
-
+      
+      {offline && (
+        <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-3 text-sm mb-4">
+          You&apos;re offline. Showing saved data.
+        </div>
+      )}
       {error && <div className="alert-error">{error}</div>}
       {loading && <p className="text-gray-500">Loading courses...</p>}
 

@@ -150,6 +150,7 @@ export default function PrivacyPage() {
                         </p>
                         <p className="text-sm text-gray-500">
                           Last used: {d.last_seen_at ? new Date(d.last_seen_at).toLocaleString() : "never"}
+                          
                           <button
                             className="text-red-600 underline text-sm mt-2"
                             onClick={() => handleRemoveDevice(d.id)}

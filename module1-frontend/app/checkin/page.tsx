@@ -16,6 +16,7 @@ interface CheckinResult {
 }
 
 function errorText(err: any, fallback: string): string {
+  if (!err?.response) return "Can't reach the server. Please check your connection and try again.";
   const detail = err?.response?.data?.detail;
   return typeof detail === "string" ? detail : fallback;
 }
@@ -46,6 +47,7 @@ function CheckinContent() {
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<CheckinResult | null>(null);
   const [error, setError] = useState("");
+  const [online, setOnline] = useState(true);
 
   const needsPhoto =
     !!session && (session.require_liveness_check || session.require_face_match);
@@ -146,7 +148,19 @@ function CheckinContent() {
     const t = setTimeout(() => setCountdown(countdown - 1), 1000);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [countdown]);  
+  }, [countdown]); 
+  
+  useEffect(() => {
+    setOnline(navigator.onLine);
+    const on = () => setOnline(true);
+    const off = () => setOnline(false);
+    window.addEventListener("online", on);
+    window.addEventListener("offline", off);
+    return () => {
+      window.removeEventListener("online", on);
+      window.removeEventListener("offline", off);
+    };
+  }, []);
 
   async function handleGetLocation() {
     setLocating(true);
@@ -221,6 +235,11 @@ function CheckinContent() {
         <div className="max-w-md w-full">
           <h1 className="text-2xl font-bold mb-4">Check In</h1>
 
+          {!online && (
+            <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-3 text-sm mb-4">
+              You&apos;re offline. Check-in needs a connection, so reconnect to continue.
+            </div>
+          )}
           {loading && <p className="text-gray-500">Loading...</p>}
           {error && <div className="alert-error">{error}</div>}
 
@@ -330,7 +349,7 @@ function CheckinContent() {
               <button
                 className="btn-primary"
                 onClick={handleCheckIn}
-                disabled={submitting || !ready}
+                disabled={submitting || !ready || !online}
               >
                 {submitting ? "Checking in..." : "Check In Now"}
               </button>

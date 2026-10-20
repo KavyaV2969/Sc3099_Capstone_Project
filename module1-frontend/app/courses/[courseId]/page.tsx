@@ -39,7 +39,7 @@ export default function CourseCheckinsPage() {
 
   return (
     <AppShell>
-      <div className="flex justify-center pt-12">
+      <div className="flex justify-center">
         <div className="max-w-md w-full">
           <Link href="/courses" className="text-sm text-blue-600 underline">
             ← Back to courses
