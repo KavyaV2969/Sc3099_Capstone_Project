@@ -6,15 +6,169 @@
  * geolocation, and device binding.
  */
 
+"use client";
+import { clearAuthStorage, hasAccessToken } from "@/lib/storage";
+import { cacheSessions, getCachedSessions } from "@/lib/offlineCache";
+import { cacheUser, getCachedUser } from "@/lib/offlineCache";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { api } from "@/lib/api";
+import { AppShell } from "@/components/ui/layout/AppShell";
+import type { Session, Checkin } from "@/lib/types";
+
+function formatTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: "2-digit" });
+}
+
+function canCheckIn(session: Session): boolean {
+  const now = new Date();
+  const opens = new Date(session.checkin_opens_at);
+  const closes = new Date(session.checkin_closes_at);
+  return session.status === "active" && now >= opens && now <= closes;
+}
+
 export default function Home() {
+  const router = useRouter();
+  const [checked, setChecked] = useState(false);
+  const [faceEnrolled, setFaceEnrolled] = useState<boolean | null>(null);
+  const [checkinStatus, setCheckinStatus] = useState<Record<string, string>>({});
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!hasAccessToken()) {
+      router.push("/login");
+      return;
+    }
+    setChecked(true);
+
+    async function loadData() {
+      let user;
+      try {
+        const { data } = await api.get("/users/me");
+        user = data;
+        await cacheUser(user);
+      } catch (networkErr) {
+        const cached = await getCachedUser();
+        if (cached) {
+          user = cached;
+          setError("Showing offline data — may not be up to date.");
+        } else {
+          setError("Failed to load your data.");
+          setLoading(false);
+          return;
+        }
+      }
+
+      setFaceEnrolled(user.face_enrolled);
+
+      if (user.face_enrolled) {
+        try {
+          const { data: sessionData } = await api.get<Session[]>("/sessions/my-sessions");
+          const activeSessions = sessionData.filter((s) => s.status === "active");
+          setSessions(activeSessions);
+          await cacheSessions(activeSessions);
+        } catch (networkErr) {
+          const cached = await getCachedSessions();
+          if (cached) {
+            setSessions(cached);
+          }
+        }
+        try {
+          const { data: mine } = await api.get<Checkin[]>("/checkins/my-checkins", {
+            params: { limit: 100 },
+          });
+          setCheckinStatus(Object.fromEntries(mine.map((c) => [c.session_id, c.status])));
+        } catch {
+          // offline or failed: cards just won't show the checked-in state
+        }
+      }
+
+      if (user.face_enrolled) {
+        try {
+          const { data: sessionData } = await api.get<Session[]>("/sessions/my-sessions");
+          const activeSessions = sessionData.filter((s) => s.status === "active");
+          setSessions(activeSessions);
+          await cacheSessions(activeSessions);
+        } catch (networkErr) {
+          const cached = await getCachedSessions();
+          if (cached) {
+            setSessions(cached);
+          }
+        }
+      }
+
+      setLoading(false);
+    }
+    loadData();
+  }, [router]);
+
+  if (!checked) {
+    return null
+  }
+
   return (
-    <main className="min-h-screen p-8">
-      <h1 className="text-3xl font-bold mb-4">
-        SAIV - Secure Attendance System
-      </h1>
-      <p className="text-gray-600 mb-8">
-        Student Check-in Interface
-      </p>
+    <AppShell>
+      {loading && <p className="text-gray-500">Loading ...</p>}
+
+      {error && <div className="alert-error">{error}</div>}
+
+      {!loading && faceEnrolled === false && (
+        <div className="card-panel !max-w-none text-center">
+          <h1 className="text-xl font-bold mb-2">Check-in</h1>
+          <p className="text-gray-400 mb-4">
+            Face Enrollment Required
+          </p>
+
+          <div className="card-panel !max-w-none">
+            <h1 className="text-xl font-bold mb-2">Enrol face first</h1>
+            <p className="text-gray-400 mb-4">
+              You need to register your face first before you can check in to any sessions.
+            </p>
+            <button
+              className="btn-primary"
+              onClick={()=> router.push("/enroll-face")}
+            >
+              Register Face
+            </button>
+            <button
+              className="btn-secondary gap-3 self-center mt-3"
+              onClick={() => router.push("/privacy")}>
+                Privacy & Security
+            </button>
+          </div>
+        </div>
+      )}
+
+      {!loading && faceEnrolled === true && (
+        <>
+          <h1 className="text-2xl font-bold mb-6">Active Sessions</h1>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {sessions.map((session) => (
+              <button
+                key={session.id}
+                className="card-panel !max-w-none text-left disabled:opacity-60 disabled:cursor-not-allowed hover:shadow-md transition-shadow"
+                disabled={!canCheckIn(session) || !!checkinStatus[session.id]}
+                onClick={() => router.push(`/checkin?session=${session.id}`)}
+              >
+                <p className="text-sm text-gray-500">{session.course_code}</p>
+                <h2 className="text-lg font-semibold">{session.course_name}</h2>
+                <p className="text-sm text-gray-600">{session.venue_name}</p>
+                <p className="text-sm font-medium text-blue-600 mt-4 capitalize">
+                  {checkinStatus[session.id]
+                    ? `Checked in · ${checkinStatus[session.id]}`
+                    : canCheckIn(session)
+                    ? "Tap to check in"
+                    : "Not open yet"}
+                </p>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </AppShell>
+  );
 
       {/* ================================================================== */}
       {/* TODO: Implement the following features                             */}
@@ -69,11 +223,4 @@ export default function Home() {
       {/* 4. Grant location permission (with consent)                        */}
       {/* 5. Submit check-in to backend                                      */}
       {/* 6. Display success/failure with risk score                         */}
-
-      <div className="bg-yellow-100 border-l-4 border-yellow-500 p-4 mt-8">
-        <p className="font-bold">Skeleton Implementation</p>
-        <p>Please implement the required features as described above.</p>
-      </div>
-    </main>
-  );
 }

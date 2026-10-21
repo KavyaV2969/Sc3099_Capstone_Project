@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { Card } from "@/components/ui/Card";
+import { StorageKeys, setItem } from "@/lib/storage";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -15,10 +16,26 @@ export default function RegisterPage() {
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  function isStrongPassword(password: string): boolean {
+    const hasUpper = /[A-Z]/.test(password);
+    const hasLower = /[a-z]/.test(password);
+    const hasNumber = /[0-9]/.test(password);
+    const hasSymbol = /[!@#$%^&*(),.?":{}|<>_\-+=~`[\]/\\;']/.test(password);
+    return hasUpper && hasLower && hasNumber && hasSymbol && password.length >= 8;
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
 
+    if (!email.toLowerCase().endsWith("@e.ntu.edu.sg")) {
+      setError("Please use your NTU student email (yourname@e.ntu.edu.sg)")
+      return;
+    }
+    if (!isStrongPassword(password)) {
+      setError("Password must contain at least 8 characters and include uppercase, lowercase, symbols and numbers");
+      return;
+    }
     if (password !== confirmPassword) {
       setError("Passwords do not match.");
       return;
@@ -32,7 +49,11 @@ export default function RegisterPage() {
         full_name: fullName,
         // role omitted — backend defaults to "student"
       });
-      router.push("/login");
+      const { data } = await api.post("/auth/login", { email, password });
+      setItem(StorageKeys.accessToken, data.access_token);
+      setItem(StorageKeys.refreshToken, data.refresh_token);
+
+      router.push("/consent");
     } catch (err: any) {
       const message = err?.response?.data?.detail ?? "Registration failed.";
       setError(message);
@@ -78,13 +99,16 @@ export default function RegisterPage() {
           <input
             id="password"
             type="password"
-            placeholder="At least 8 characters"
+            placeholder="********"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
             minLength={8}
             className="input-field"
           />
+          <p className="text-xs text-gray-500 mt-1">
+            Please include uppercase, lowercase, numbers and symbols.
+          </p>
         </div>
 
         <div className="mb-4">
@@ -92,6 +116,7 @@ export default function RegisterPage() {
           <input
             id="confirmPassword"
             type="password"
+            placeholder="********"
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             required

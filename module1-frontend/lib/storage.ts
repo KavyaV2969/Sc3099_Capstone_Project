@@ -1,3 +1,5 @@
+import { clearOfflineData } from "./offlineStore";
+
 export const StorageKeys = {
   accessToken: "access_token",
   refreshToken: "refresh_token",
@@ -60,6 +62,7 @@ export function hasAccessToken(): boolean {
 export function clearAuthStorage() {
   removeItem(StorageKeys.accessToken);
   removeItem(StorageKeys.refreshToken);
+  void clearOfflineData();
 }
 
 export function subscribeToAuthStateChange(callback: () => void) {
