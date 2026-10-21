@@ -18,6 +18,7 @@ Recommended Libraries:
 """
 
 import base64
+import ipaddress
 import numpy as np
 import mediapipe as mp
 import threading
@@ -30,8 +31,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.concurrency import run_in_threadpool 
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from pydantic import BaseModel
-from typing import Optional, Dict, List, Any
+from pydantic import BaseModel, Field
+from typing import Optional, Dict, List, Any, Literal
 
 #### CONFIGURATIONS 
 
@@ -51,6 +52,51 @@ MATCH_HAMMING_THRESHOLD = 60
 
 MAX_IMAGE_BYTES = 10*1024*1024 #image above 10MB size to be rejected 
 MIN_FACE_SIZE_PX = 40 #facenet reqs 160x160 so if face size in pixels is too small, the embedding would be inaccurate 
+
+LIVENESS_THRESHOLD = 0.6
+LIVENESS_WEIGHTS = {
+    "depth" : 0.30, 
+    "mesh" : 0.25,
+    "texture" : 0.25,
+    "color" : 0.20
+}
+
+FACE_MESH_LANDMARKS = 468
+MESH_CROP_MARGIN = 0.5
+DEPTH_FLAT_Z = 0.01
+DEPTH_REAL_Z = 0.05
+
+TEXTURE_BLUR_VAR = 50.0
+TEXTURE_SHARP_VAR = 200.0
+TEXTURE_MOIRE_VAR = 1000.0
+SKIN_RATIO_FULL = 0.5
+SKIN_CR_STD_FLAT = 3.0
+SKIN_CR_STD_FULL = 7.0
+SKIN_CR_RANGE = (133,173)
+SKIN_CB_RANGE = (77,127)
+SPOOF_CUE_FLOOR = 0.3
+SPOOF_SCORE_CAP = 0.5
+
+RISK_WEIGHTS = {
+    "liveness" : 0.25,
+    "face_match" : 0.25,
+    "device" : 0.2, 
+    "network" : 0.15,
+    "geolocation" : 0.15
+}
+
+RISK_THRESHOLD = 0.5
+MISSING_SIGNAL_RISK = 0.5
+
+DEVICE_RISK_THRESHOLD = 0.5
+
+GEO_TOO_PRECISE_M = 10
+GEO_RADIUS_M = 100
+GEO_POOR_M = 5000
+GEO_RISK_THRESHOLD = 0.5
+
+VPN_KEYWORDS = ["vpn", "proxy", "tunnel", "tor"]
+
 
 
 # =============================================================================
@@ -139,7 +185,7 @@ class FaceMatchResponse(BaseModel):
 class LivenessRequest(BaseModel):
     """Request model for liveness check."""
     challenge_response: str  # Base64 encoded image
-    challenge_type: str = "blink"  # blink, head_turn, passive
+    challenge_type: Literal["passive", "blink", "head_turn"] = "passive"  # blink, head_turn, passive
 
 
 class LivenessResponse(BaseModel):
@@ -147,21 +193,22 @@ class LivenessResponse(BaseModel):
     liveness_passed: bool
     liveness_score: float  # 0.0 to 1.0
     liveness_threshold: float  # Default: 0.60
+    challenge_type: str
     face_embedding_hash: str
     details: Dict[str, Any]
 
 
 class GeolocationData(BaseModel):
     """Geolocation data for risk assessment."""
-    latitude: float
-    longitude: float
-    accuracy: float
+    latitude: float = Field(ge=-90, le=90, allow_inf_nan=False)
+    longitude: float = Field(ge=-180, le=180, allow_inf_nan=False)
+    accuracy: float = Field(ge=0, allow_inf_nan=False)
 
 
 class RiskAssessRequest(BaseModel):
     """Request model for risk assessment."""
-    liveness_score: Optional[float] = None
-    face_match_score: Optional[float] = None
+    liveness_score: Optional[float] = Field(default=None, ge=0.0, le=1.0, allow_inf_nan=False)
+    face_match_score: Optional[float] = Field(default=None, ge=0.0, le=1.0, allow_inf_nan=False)
     device_signature: Optional[str] = None
     device_public_key: Optional[str] = None
     ip_address: Optional[str] = None
@@ -350,8 +397,20 @@ async def check_liveness(request: LivenessRequest):
     - Real faces: |nose_tip_z| > 0.03 (significant depth)
     - Flat images: |nose_tip_z| < 0.01 (minimal depth)
     """
-    # TODO: Implement liveness detection
-    raise HTTPException(status_code=501, detail="Not implemented")
+    if request.challenge_type != "passive":
+        raise HTTPException(status_code=400, detail=f"Challenge type '{request.challenge_type}' not supported yet! Use 'passive'!")
+
+    result = await run_in_threadpool(process_liveness, request.challenge_response)
+
+    return LivenessResponse(
+        liveness_passed=result["liveness_passed"],
+        liveness_score= result["liveness_score"],
+        liveness_threshold= LIVENESS_THRESHOLD,
+        challenge_type=request.challenge_type,
+        face_embedding_hash=result["face_embedding_hash"],
+        details = result["details"]
+        
+    )    
 
 
 # =============================================================================
@@ -395,7 +454,31 @@ async def assess_risk(request: RiskAssessRequest):
     - Very low accuracy (> 5000m) indicates issues
     """
     # TODO: Implement risk assessment
-    raise HTTPException(status_code=501, detail="Not implemented")
+    signals = {
+        "liveness" : liveness_risk(request.liveness_score),
+        "face_match" : face_match_risk(request.face_match_score),
+        "device" : device_risk(request.device_signature, request.device_public_key),
+        "network" : network_risk(request.ip_address, request.user_agent),
+        "geolocation" : geo_risk(request.geolocation)
+    }
+
+    contributions = {}
+    recommendations = []
+    for name, (risk, recommendation) in signals.items():
+        contributions[name] = RISK_WEIGHTS[name] * risk
+        if recommendation:
+            recommendations.append(recommendation)
+
+    risk_score = round(sum(contributions.values()), 2)
+
+    return RiskAssessResponse(
+        risk_score = risk_score,
+        risk_level = risk_level_readable(risk_score),
+        pass_threshold = risk_score < RISK_THRESHOLD,
+        risk_threshold = RISK_THRESHOLD,
+        signal_breakdown = {name: round(value, 2) for name, value in contributions.items()},
+        recommendations = recommendations
+    )
 
 
 # =============================================================================
@@ -666,7 +749,167 @@ def analyze_face_mesh(image_array):
     - nose_tip_z: float
     - depth_quality: "good" | "moderate" | "poor"
     """
-    pass
+    mp_face_mesh = mp.solutions.face_mesh
+    with mp_face_mesh.FaceMesh(static_image_mode=True, max_num_faces=1, refine_landmarks=False, min_detection_confidence = 0.5) as face_mesh:
+        results = face_mesh.process(image_array)
+
+    if not results.multi_face_landmarks:
+        return{
+            "face_mesh_complete" : False, 
+            "landmark_count" : 0,
+            "in_frame_ratio" : 0.0,
+            "nose_tip_z" : 0.0,
+            "depth_quality" : "poor"
+        }
+    landmarks = results.multi_face_landmarks[0].landmark
+    landmark_count = len(landmarks)
+
+    in_frame = sum(1 for landmark in landmarks if 0 <= landmark.x <= 1 and 0 <= landmark.y <= 1)
+    in_frame_ratio = in_frame / FACE_MESH_LANDMARKS
+
+    nose_tip_z = landmarks[1].z
+
+    if nose_tip_z < -DEPTH_REAL_Z:
+        depth_quality = "good"
+    elif abs(nose_tip_z) > DEPTH_FLAT_Z:
+        depth_quality = "moderate"
+    else:
+        depth_quality = "poor"
+
+    return {
+            "face_mesh_complete" : landmark_count >= FACE_MESH_LANDMARKS and in_frame == landmark_count,     
+            "landmark_count" : landmark_count,
+            "in_frame_ratio" : round(in_frame_ratio, 2),
+            "nose_tip_z" : round(nose_tip_z, 2),
+            "depth_quality" : depth_quality
+    }
+
+def depth_score_from_z(nose_tip_z: float) -> float:
+    score = (-nose_tip_z - DEPTH_FLAT_Z) / (DEPTH_REAL_Z - DEPTH_FLAT_Z)
+    return round(min(1.0, max(0.0, score)), 2)
+
+def crop_face_region (image_array, detection, margin: float):
+    h,w = image_array.shape[:2]
+    x0,y0,x1,y1 = bbox_to_pixels(detection["bounding_box"], w ,h)
+    pad_x = int((x1 - x0) * margin)
+    pad_y = int((y1-y0) * margin)
+    return image_array[max(0, y0 - pad_y):min(h, y1 + pad_y), max(0, x0 - pad_x):min(w, x1 + pad_x)]
+
+def analyse_texture(face_crop) -> float:
+    gray = cv2.cvtColor(face_crop, cv2.COLOR_RGB2GRAY)
+    variance = float(cv2.Laplacian(gray, cv2.CV_64F).var())
+
+    if variance > TEXTURE_MOIRE_VAR:
+        score = 1.0 - (variance - TEXTURE_MOIRE_VAR) / TEXTURE_MOIRE_VAR
+    else:
+        score = (variance - TEXTURE_BLUR_VAR) / (TEXTURE_SHARP_VAR - TEXTURE_BLUR_VAR)
+    return round(min(1.0, max(0.0, score)), 2)
+
+def analyse_skin_color(face_crop) -> float:
+    ycrcb = cv2.cvtColor(face_crop, cv2.COLOR_RGB2YCrCb)
+    cr = ycrcb[:, :, 1]
+    cb = ycrcb[:, :, 2]
+    skin = (
+        (cr >= SKIN_CR_RANGE[0]) & (cr <= SKIN_CR_RANGE[1]) &
+        (cb >= SKIN_CB_RANGE[0]) & (cb <= SKIN_CB_RANGE[1])
+    )
+
+    skin_ratio = float(skin.mean())
+    if skin_ratio == 0:
+        return 0.0
+
+    cr_std = float(cr[skin].std())
+    ratio_score = min(1.0, skin_ratio / SKIN_RATIO_FULL)
+    variance_score = min(1.0, max(0.0, (cr_std - SKIN_CR_STD_FLAT) / (SKIN_CR_STD_FULL - SKIN_CR_STD_FLAT)))
+    return round(0.5 * ratio_score + 0.5 * variance_score, 2)
+
+def liveness_failed_result(reason:str, face_detected: bool, confidence: float) ->  dict:
+    return{
+        "liveness_passed" : False, 
+        "liveness_score" : 0.0,
+        "face_embedding_hash" : "",
+        "details" : {
+            "face_detected" : face_detected,
+            "face_detection_confidence" : confidence,
+            "face_mesh_complete" : False,
+            "depth_detected" : False,
+            "texture_analysis_score" : 0.0,
+            "threshold" : LIVENESS_THRESHOLD,
+            "reason" : reason
+        }
+    }
+
+def process_liveness(image_b64: str) -> dict:
+    image_array = None
+    embedding = None
+    face_crop = None
+    try:
+        image_array = decode_base64_image(image_b64)
+        if image_array is None:
+            raise HTTPException(status_code=400, detail="Invalid image data!")
+
+        detection = detect_face(image_array)
+        if not detection["detected"]:
+            return liveness_failed_result("No face detected", face_detected=False, confidence = 0.0)
+
+        confidence = round(detection["confidence"], 2)
+        try:
+            face_crop = crop_for_facenet(image_array, detection)
+        except ValueError as e:
+            return liveness_failed_result(str(e), face_detected=True, confidence = confidence)
+
+        quality_score = compute_quality_score(detection["confidence"], image_array, detection["bounding_box"])
+        if confidence < ENROLL_MIN_CONFIDENCE or quality_score < ENROLL_MIN_QUALITY:
+            return liveness_failed_result(f"Face image quality too low (confidence {confidence:.2f}, quality {quality_score:.2f})", face_detected=True, confidence=confidence)
+
+        mesh = analyze_face_mesh(crop_face_region(image_array, detection, MESH_CROP_MARGIN))
+        depth_score = depth_score_from_z(mesh["nose_tip_z"])
+        mesh_score = mesh["in_frame_ratio"]
+        texture_score = analyse_texture(face_crop)
+        color_score = analyse_skin_color(face_crop)
+
+        liveness_score = round(
+            LIVENESS_WEIGHTS["depth"] * depth_score + 
+            LIVENESS_WEIGHTS["mesh"] * mesh_score +
+            LIVENESS_WEIGHTS["texture"] * texture_score +
+            LIVENESS_WEIGHTS["color"] * color_score, 2
+        )
+
+        spoof_suspected = texture_score < SPOOF_CUE_FLOOR or color_score < SPOOF_CUE_FLOOR
+        if spoof_suspected:
+            liveness_score = min(liveness_score, SPOOF_SCORE_CAP)
+
+        embedding = extract_face_embedding(image_array, detection)
+        face_hash = generate_face_hash(embedding)
+
+        return{
+            "liveness_passed" : liveness_score >= LIVENESS_THRESHOLD,
+            "liveness_score" : liveness_score,
+            "face_embedding_hash" : face_hash,
+            "details" : {
+                "face_detected" : True, 
+                "face_detection_confidence" : confidence,
+                "quality_score" : quality_score,
+                "image_quality" : image_quality_label(quality_score),
+                "face_mesh_complete" : mesh["face_mesh_complete"],
+                "landmark_count" : mesh["landmark_count"],
+                "depth_detected" : mesh["depth_quality"] != "poor",
+                "depth_quality" : mesh["depth_quality"],
+                "nose_tip_z" : mesh["nose_tip_z"],
+                "depth_score" : depth_score,
+                "mesh_score" : mesh_score, 
+                "texture_analysis_score" : texture_score,
+                "color_score" : color_score,
+                "spoof_suspected" : spoof_suspected,
+                "threshold" : LIVENESS_THRESHOLD
+            }
+        }
+    finally:
+        del image_array
+        del embedding
+        del face_crop
+
+
 
 
 def detect_blink(face_mesh_landmarks):
@@ -696,26 +939,124 @@ def detect_vpn_proxy(ip_address: str, user_agent: str) -> tuple:
     is_vpn = False
     confidence = 0.0
 
-    if ip_address:
-        # Private IP ranges (common VPN indicators)
-        if (ip_address.startswith('10.') or
-            ip_address.startswith('192.168.') or
-            ip_address.startswith('172.16.') or
-            ip_address.startswith('172.17.') or
-            ip_address.startswith('172.18.') or
-            ip_address.startswith('172.19.')):
-            is_vpn = True
-            confidence = 0.7
+    ip = parse_ip(ip_address)
+    if ip is not None and ip.is_private:
+        is_vpn = True
+        confidence = 0.7
 
     if user_agent:
-        vpn_keywords = ['vpn', 'proxy', 'tunnel', 'tor']
-        if any(kw in user_agent.lower() for kw in vpn_keywords):
-            is_vpn = True
-            confidence = max(confidence, 0.8)
+      words = [word.strip("():,") for word in user_agent.lower().split()]
+      if any(word.startswith(kw) for word in words for kw in VPN_KEYWORDS):
+          is_vpn = True
+          confidence = 0.8
 
     return is_vpn, confidence
 
+def parse_ip(ip_address: Optional[str]):
+    if not ip_address:
+        return None
+    try:
+        return ipaddress.ip_address(ip_address.strip())
+    except ValueError:
+        return None
 
+def liveness_risk(liveness_score: Optional[float]) -> tuple:
+    recommendation = None
+    if liveness_score is None:
+        return MISSING_SIGNAL_RISK, recommendation
+    if liveness_score < LIVENESS_THRESHOLD:
+        recommendation = "Improve lighting and face visibility" 
+    return 1.0 - liveness_score, recommendation
+
+def face_match_risk(face_match_score: Optional[float]) -> tuple:
+    recommendation = None
+    if face_match_score is None:
+        return MISSING_SIGNAL_RISK, recommendation
+    if face_match_score < MATCH_THRESHOLD:
+        recommendation = "Re-enroll face or improve image quality"
+    return 1.0 - face_match_score, recommendation
+
+def is_pem_public_key(key: str) -> bool:
+    lines = [line.strip() for line in key.strip().splitlines() if line.strip()]
+    if len(lines) < 3:
+        return False
+    begin, body, end  =  lines[0], lines[1:-1], lines[-1]
+    if not (begin.startswith("-----BEGIN ") and begin.endswith("PUBLIC KEY-----")):
+        return False
+    if not (end.startswith("-----END ") and end.endswith("PUBLIC KEY-----")):
+        return False    
+    try:
+        base64.b64decode("".join(body), validate=True)
+        return True
+    except ValueError:
+        return False
+
+def device_risk(device_signature: Optional[str], device_public_key: Optional[str]) -> tuple:
+    has_signature = bool(device_signature and device_signature.strip())
+    has_key = bool(device_public_key and device_public_key.strip())   
+    recommendation = None
+    if not has_signature and not has_key:
+        return MISSING_SIGNAL_RISK, recommendation
+
+    risk = 0.0
+    if not has_signature:
+        risk += 0.5
+    if not (has_key and is_pem_public_key(device_public_key)):
+        risk +=0.5
+
+    if risk >= DEVICE_RISK_THRESHOLD:
+        recommendation = "Please try again on another device"
+    return risk, recommendation 
+
+def network_risk(ip_address: Optional[str], user_agent: Optional[str]) -> tuple:
+    recommendation = None
+    if not ip_address and not user_agent:
+        return MISSING_SIGNAL_RISK, recommendation
+    is_vpn, confidence = detect_vpn_proxy(ip_address, user_agent)
+    risk = 0.0
+
+    if is_vpn == True:
+        risk = confidence
+        recommendation = "Disable VPN for check-in"
+
+    if ip_address and parse_ip(ip_address) is None:
+        risk = max(risk, 0.6)
+
+    return risk, recommendation
+
+
+def geo_risk(geolocation: Optional[GeolocationData]) -> tuple:
+    recommendation = None
+    if geolocation is None:
+        return MISSING_SIGNAL_RISK, recommendation
+
+    accuracy = geolocation.accuracy
+    if geolocation.latitude == 0 and geolocation.longitude == 0:
+        risk = 0.9
+    elif accuracy == 0 :
+        risk = 0.9
+    elif accuracy < GEO_TOO_PRECISE_M:
+        risk = 0.3
+    elif accuracy <= GEO_RADIUS_M:
+        risk = 0.0
+    elif accuracy <= 1000:
+        risk = 0.5
+    elif accuracy <= GEO_POOR_M:
+        risk = 0.8
+    else:
+        risk = 1.0
+    if risk >= GEO_RISK_THRESHOLD:
+        recommendation = "Enable precise location services"
+    return risk, recommendation
+
+def risk_level_readable(risk_score: float) -> str:
+    if risk_score < 0.3:
+        return "LOW"
+    if risk_score < 0.5:
+        return "MEDIUM"
+    if risk_score < 0.7:
+        return "HIGH"
+    return "CRITICAL"
 
 # =============================================================================
 # PRIVACY REQUIREMENTS (IMPORTANT!)
