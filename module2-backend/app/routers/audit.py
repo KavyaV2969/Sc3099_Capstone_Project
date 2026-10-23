@@ -1,6 +1,6 @@
 """Read-only audit-log route for administrators."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import UUID4
@@ -10,10 +10,22 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.dependencies import require_roles
-from app.models import AuditLog, User
+from app.models import AuditLog, User, utc_now
 from app.schemas import AuditLogListResponse, AuditLogResponse, UserRole, as_utc
 
 router = APIRouter(prefix="/audit", tags=["audit"])
+
+
+@router.get("/summary")
+def audit_summary(
+    days: int = Query(7, ge=1, le=365), database: Session = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.ADMIN)),
+):
+    now = utc_now()
+    by_action = dict(database.execute(select(AuditLog.action, func.count()).where(
+        AuditLog.timestamp >= now - timedelta(days=days), AuditLog.timestamp <= now)
+        .group_by(AuditLog.action)).all())
+    return {"period_days": days, "total_logs": sum(by_action.values()), "by_action": by_action}
 
 
 @router.get("/", response_model=AuditLogListResponse)

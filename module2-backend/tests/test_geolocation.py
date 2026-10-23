@@ -45,54 +45,39 @@ def test_singapore_gps_boundary(latitude, longitude, allowed):
     ("::ffff:192.168.1.2", True), ("203.0.113.1", False),
     ("224.0.0.1", False), ("not-an-ip", False), ("", False),
 ])
-def test_local_and_invalid_ips_do_not_need_lookup(monkeypatch, address, allowed):
+def test_local_and_invalid_ips(address, allowed):
     from app.utils import geolocation
-    def unexpected():
-        pytest.fail("local/invalid IP triggered an external lookup")
-    monkeypatch.setattr(geolocation, "get_redis_client", unexpected)
     assert geolocation.ip_is_in_singapore(address) is allowed
 
 
-def test_public_country_lookup_is_cached(monkeypatch):
-    import httpx
-    from types import SimpleNamespace
+@pytest.mark.parametrize("address,allowed", [
+    ("155.69.1.1", True),            # NTU
+    ("137.132.1.1", True),           # NUS
+    ("::ffff:155.69.1.1", True),     # IPv4-mapped IPv6
+    ("2001:208::1", True),           # Singapore IPv6 allocation
+    ("1.21.224.0", True), ("1.21.255.255", True),    # first/last of 1.21.224.0/19
+    ("1.21.223.255", False), ("1.22.0.0", False),    # just outside that block
+    ("8.8.8.8", False), ("1.1.1.1", False), ("114.114.114.114", False),
+    ("2001:4860:4860::8888", False),
+])
+def test_public_ips_use_bundled_apnic_ranges(address, allowed):
     from app.utils import geolocation
-    cached, calls = {}, []
-    def save(key, seconds, value):
-        assert seconds == 86400
-        cached[key] = value
-    def lookup(url, **kwargs):
-        calls.append(url)
-        assert kwargs["timeout"] == 3.0
-        return httpx.Response(200, request=httpx.Request("GET", url),
-                              json={"success": True, "country_code": "SG"})
-    monkeypatch.setattr(geolocation, "get_redis_client", lambda: SimpleNamespace(get=cached.get, setex=save))
-    monkeypatch.setattr(geolocation.httpx, "get", lookup)
-    assert geolocation.ip_is_in_singapore("8.8.8.8") is True
-    assert geolocation.ip_is_in_singapore("8.8.8.8") is True
-    assert calls == ["https://ipwho.is/8.8.8.8"]
+    assert geolocation.ip_is_in_singapore(address) is allowed
 
 
-@pytest.mark.parametrize("failure", ["timeout", "http", "unsuccessful", "missing_country", "malformed"])
-def test_public_lookup_failures_return_503(monkeypatch, failure):
-    import httpx
-    from types import SimpleNamespace
-    from fastapi import HTTPException
+def test_ip_lookup_is_offline(monkeypatch):
+    import socket
     from app.utils import geolocation
-    monkeypatch.setattr(geolocation, "get_redis_client", lambda: SimpleNamespace(get=lambda _: None))
-    def lookup(url, **kwargs):
-        if failure == "timeout":
-            raise httpx.ReadTimeout("timeout")
-        data = {"success": True, "country_code": "SG"}
-        if failure == "unsuccessful":
-            data["success"] = False
-        elif failure == "missing_country":
-            data.pop("country_code")
-        elif failure == "malformed":
-            data = []
-        return httpx.Response(429 if failure == "http" else 200,
-                              request=httpx.Request("GET", url), json=data)
-    monkeypatch.setattr(geolocation.httpx, "get", lookup)
-    with pytest.raises(HTTPException) as error:
-        geolocation.ip_is_in_singapore("8.8.8.8")
-    assert error.value.status_code == 503
+    def no_network(*args, **kwargs):
+        pytest.fail("IP eligibility must not use the network")
+    monkeypatch.setattr(socket, "getaddrinfo", no_network)
+    monkeypatch.setattr(socket, "create_connection", no_network)
+    assert geolocation.ip_is_in_singapore("155.69.1.1") is True
+    assert geolocation.ip_is_in_singapore("8.8.8.8") is False
+
+
+def test_bundled_ip_data_records_provenance():
+    from app.utils.geolocation import DATA
+    header = (DATA / "singapore_ip_ranges.txt").read_text(encoding="ascii").splitlines()[:6]
+    assert any("ftp.apnic.net/stats/apnic/delegated-apnic-latest" in line for line in header)
+    assert any("APNIC serial:" in line and "source MD5:" in line for line in header)

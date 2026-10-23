@@ -5,10 +5,10 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, UUID4, field_validator, model_validator
 
-from .common import CheckinStatus, Latitude, Longitude, Radius, RiskScore, SessionStatus, SessionType, ShortName, as_utc
+from .common import MutationModel, bounded_image, escape_text, validate_name, CheckinStatus, Latitude, Longitude, Radius, RiskScore, SessionStatus, SessionType, ShortName, as_utc
 
 
-class SessionCreate(BaseModel):
+class SessionCreate(MutationModel):
     course_id: UUID4
     name: ShortName
     session_type: SessionType = SessionType.LECTURE
@@ -30,7 +30,7 @@ class SessionCreate(BaseModel):
         return as_utc(value) if value is not None else None
 
 
-class SessionUpdate(BaseModel):
+class SessionUpdate(MutationModel):
     name: ShortName | None = None
     session_type: SessionType | None = None
     status: SessionStatus | None = None
@@ -63,6 +63,8 @@ class SessionUpdate(BaseModel):
 
 class SessionResponse(SessionCreate):
     model_config = ConfigDict(from_attributes=True)
+    name: str
+    venue_name: str | None = None
     id: UUID4
     instructor_id: UUID4
     status: SessionStatus
@@ -87,14 +89,29 @@ class SessionListResponse(BaseModel):
     offset: int
 
 
-class CheckinCreate(BaseModel):
+class CheckinCreate(MutationModel):
     session_id: UUID4
     latitude: Latitude
     longitude: Longitude
-    location_accuracy_meters: float = Field(ge=0, allow_inf_nan=False)
-    device_fingerprint: str = Field(min_length=1, max_length=255)
+    location_accuracy_meters: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    device_fingerprint: str = Field(min_length=1, max_length=64)
     liveness_challenge_response: str | None = Field(default=None, max_length=14_000_000)
-    qr_code: str | None = Field(default=None, max_length=2000)
+    # Accepted for client compatibility; no session requires QR (qr_code_enabled is false).
+    qr_code: str | None = Field(default=None, max_length=2000, exclude=True)
+    device_challenge_id: UUID4 | None = None
+    device_signature: str | None = Field(default=None, min_length=1, max_length=20_000)
+
+    @field_validator("liveness_challenge_response")
+    @classmethod
+    def image_size(cls, value):
+        return bounded_image(value)
+
+
+    @model_validator(mode="after")
+    def proof_pair(self):
+        if (self.device_challenge_id is None) != (self.device_signature is None):
+            raise ValueError("device_challenge_id and device_signature must be supplied together")
+        return self
 
 
 class CheckinResponse(BaseModel):
@@ -106,7 +123,7 @@ class CheckinResponse(BaseModel):
     verified_at: datetime | None = None
     latitude: float
     longitude: float
-    location_accuracy_meters: float
+    location_accuracy_meters: float | None
     distance_from_venue_meters: float
     status: CheckinStatus
     risk_score: float
@@ -140,26 +157,56 @@ class CheckinListResponse(BaseModel):
     offset: int
 
 
-class CheckinAppeal(BaseModel):
-    appeal_reason: str = Field(min_length=10, max_length=2000)
+class CheckinAppeal(MutationModel):
+    appeal_reason: str = Field(min_length=1, max_length=2000)
+
+    @field_validator("appeal_reason")
+    @classmethod
+    def safe_reason(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("appeal_reason must not be blank")
+        return escape_text(value)
 
 
-class CheckinReview(BaseModel):
+class CheckinReview(MutationModel):
     status: Literal["approved", "rejected"]
-    review_notes: str = Field(min_length=1, max_length=2000)
+    review_notes: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("review_notes")
+    @classmethod
+    def safe_notes(cls, value: str | None) -> str | None:
+        return escape_text(value) or None
 
 
-class DeviceRegister(BaseModel):
-    device_fingerprint: str = Field(min_length=1, max_length=255)
-    device_name: str = Field(min_length=1, max_length=255)
-    platform: Literal["ios", "android", "web", "desktop"]
-    public_key: str | None = Field(default=None, max_length=20_000)
+class DeviceRegister(MutationModel):
+    device_fingerprint: str = Field(min_length=1, max_length=64)
+    device_name: str | None = Field(default=None, min_length=1, max_length=255)
+    platform: Literal["ios", "android", "web", "desktop"] | None = None
+    public_key: str | None = Field(default=None, min_length=1, max_length=20_000)
+    browser: str | None = Field(default=None, max_length=255, exclude=True)
+
+    @field_validator("device_name")
+    @classmethod
+    def safe_name(cls, value: str | None) -> str | None:
+        return validate_name(value) if value is not None else None
+
+    @field_validator("public_key")
+    @classmethod
+    def require_nonblank_key(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
+            raise ValueError("public_key must not be blank")
+        return value
 
 
-class DeviceUpdate(BaseModel):
+class DeviceUpdate(MutationModel):
     device_name: str | None = Field(default=None, min_length=1, max_length=255)
     is_trusted: bool | None = None
     is_active: bool | None = None
+
+    @field_validator("device_name")
+    @classmethod
+    def safe_name(cls, value: str | None) -> str | None:
+        return validate_name(value) if value is not None else None
 
     @model_validator(mode="after")
     def require_change(self) -> "DeviceUpdate":
@@ -174,17 +221,18 @@ class DeviceResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: UUID4
     device_fingerprint: str
-    device_name: str
-    platform: str
+    device_name: str | None
+    platform: str | None
     is_trusted: bool
     trust_score: str
     is_active: bool
     first_seen_at: datetime
     last_seen_at: datetime | None = None
     total_checkins: int
+    revoked_at: datetime | None = None
 
 
-class AdminSessionStatusUpdate(BaseModel):
+class AdminSessionStatusUpdate(MutationModel):
     status: SessionStatus
 
 

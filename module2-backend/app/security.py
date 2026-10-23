@@ -9,6 +9,11 @@ from pydantic import ValidationError
 from app.config import Settings, get_settings
 from app.schemas import TokenPayload, TokenType, UserRole
 
+# Stored for accounts that must not log in with any password (pending activation,
+# anonymised). It is not a bcrypt hash, so it costs nothing to write and never verifies.
+UNUSABLE_PASSWORD = "!"
+
+
 class InvalidTokenError(ValueError):
     """Raised when a JWT is invalid or has the wrong token type."""
 
@@ -29,7 +34,7 @@ def hash_password(password: str) -> str:
 def verify_password(password: str, password_hash: str) -> bool:
     """Safely compare a plaintext password with a bcrypt hash."""
     try:
-        if len(password.encode("utf-8")) > 72:
+        if password_hash == UNUSABLE_PASSWORD or len(password.encode("utf-8")) > 72:
             return False
         return CryptContext(schemes=["bcrypt"], deprecated="auto").verify(password, password_hash)
     except (TypeError, ValueError):
