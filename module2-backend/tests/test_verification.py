@@ -271,3 +271,18 @@ def test_unsigned_api_device_states_score_registration_but_not_trust(api, ready,
     reason = {"unknown": "device_unknown", "inactive": "device_unknown", "other_owner": "device_shared"}.get(kind)
     types = {f["type"] for f in response.json()["risk_factors"]}
     assert ({"device_unknown", "device_shared"} & types) == ({reason} if reason else set())
+
+
+@pytest.mark.parametrize("path,failure", [
+    ("/liveness/check", {"liveness_passed": False, "liveness_score": 0.0, "liveness_threshold": 0.6,
+                         "face_embedding_hash": "", "details": {"face_detected": False}}),
+    ("/face/verify", {"match_passed": False, "match_score": 0.0, "match_threshold": 0.7,
+                      "face_detected": False, "current_template_hash": ""}),
+])
+def test_module3_empty_hash_failures_are_stored_as_rejected(api, ready, face_http, path, failure):
+    # Module 3 reports a failed liveness check, or no face to verify, with an empty hash.
+    enabled(api, ready, path == "/liveness/check", path == "/face/verify")
+    face_http[1][path] = failure
+    response = api.request("POST", "/checkins/", "student", json=checkin_payload(ready, liveness_challenge_response="image"))
+    assert response.status_code == 201, response.text
+    assert response.json()["status"] == "rejected"

@@ -7,13 +7,15 @@ from typing import Annotated, TypeVar
 
 import httpx
 from fastapi import HTTPException
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, StrictBool, model_validator
 from app.config import get_settings
 from app.metrics import request_id, traceparent, dependency_duration
 
 logger = logging.getLogger(__name__)
 Score = Annotated[float, Field(strict=True, ge=0, le=1, allow_inf_nan=False)]
 TemplateHash = Annotated[str, Field(strict=True, pattern=r"^[0-9a-fA-F]{64}$")]
+# Module 3 reports "no hash" (failed liveness, no face to verify) as an empty string.
+OptionalHash = Annotated[TemplateHash | None, BeforeValidator(lambda value: None if value == "" else value)]
 
 
 class ServiceResponse(BaseModel):
@@ -28,7 +30,7 @@ class EnrollmentDetails(ServiceResponse):
 class EnrollmentResult(ServiceResponse):
     enrollment_successful: StrictBool
     quality_score: Score
-    face_template_hash: TemplateHash | None = None
+    face_template_hash: OptionalHash = None
     details: EnrollmentDetails | None = None
 
     @model_validator(mode="after")
@@ -47,7 +49,7 @@ class VerificationResult(ServiceResponse):
     match_score: Score
     match_threshold: Score
     face_detected: StrictBool
-    current_template_hash: TemplateHash | None = None
+    current_template_hash: OptionalHash = None
 
     @model_validator(mode="after")
     def consistent_match(self):
@@ -62,7 +64,7 @@ class LivenessResult(ServiceResponse):
     liveness_passed: StrictBool
     liveness_score: Score
     liveness_threshold: Score
-    face_embedding_hash: TemplateHash | None = None
+    face_embedding_hash: OptionalHash = None
 
     @model_validator(mode="after")
     def consistent_liveness(self):
