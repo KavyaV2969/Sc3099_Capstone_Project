@@ -1,0 +1,93 @@
+{
+  "date": "2026-09-29",
+  "full_suite": {
+    "tests": "349",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0",
+    "time": "67.828"
+  },
+  "postgresql_cases": 71,
+  "original_postgresql_cases": 54,
+  "new_api_cases": 47,
+  "new_postgresql_cases": 17,
+  "pinned_image_suite": {
+    "passed": 278,
+    "seconds": 19.54
+  },
+  "production_image": "sha256:a0290604890402e7d86abc798995dd42547065bbd1f53d38f9b3dbe2b75654c6",
+  "schema_head": "20260929_0008",
+  "real_biometric_gate": "deferred by user; external service unavailable",
+  "http_load": [
+    {
+      "concurrent_users": 10,
+      "method": "GET",
+      "route": "/users/me",
+      "requests": 30,
+      "seconds": 0.177,
+      "p95_seconds": 0.067,
+      "max_seconds": 0.073,
+      "statuses": {
+        "200": 30
+      },
+      "unexpected_errors": {},
+      "database_wait_samples": {},
+      "meets_2_second_target": true
+    },
+    {
+      "concurrent_users": 10,
+      "method": "POST",
+      "route": "/checkins/",
+      "requests": 10,
+      "seconds": 0.213,
+      "p95_seconds": 0.188,
+      "max_seconds": 0.188,
+      "statuses": {
+        "201": 10
+      },
+      "unexpected_errors": {},
+      "database_wait_samples": {
+        "Lock:transactionid": 2,
+        "Lock:tuple": 9,
+        "IO:WALSync": 1
+      },
+      "meets_2_second_target": true
+    },
+    {
+      "concurrent_users": 100,
+      "method": "GET",
+      "route": "/users/me",
+      "requests": 300,
+      "seconds": 2.442,
+      "p95_seconds": 1.633,
+      "max_seconds": 2.004,
+      "statuses": {
+        "200": 300
+      },
+      "unexpected_errors": {},
+      "database_wait_samples": {
+        "Client:ClientRead": 1
+      },
+      "meets_2_second_target": true
+    },
+    {
+      "concurrent_users": 100,
+      "method": "POST",
+      "route": "/checkins/",
+      "requests": 100,
+      "seconds": 1.775,
+      "p95_seconds": 1.536,
+      "max_seconds": 1.694,
+      "statuses": {
+        "201": 100
+      },
+      "unexpected_errors": {},
+      "database_wait_samples": {
+        "Lock:transactionid": 4,
+        "IO:WALSync": 1,
+        "Lock:tuple": 3
+      },
+      "meets_2_second_target": true
+    }
+  ]
+}

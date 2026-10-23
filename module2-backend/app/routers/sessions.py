@@ -7,11 +7,12 @@ from sqlalchemy.orm import Session as DatabaseSession
 
 from app.audit import write_audit_log
 from app.db import get_db
-from app.dependencies import get_current_user, get_course_or_404, require_roles
+from app.dependencies import get_current_user, require_roles
 from app.models import Checkin, Course, CourseTA, Enrollment, Session, User, utc_now
 from app.schemas import (SessionCreate, SessionListResponse, SessionResponse, SessionStatus,
                          SessionUpdate, UserRole, as_utc)
-from app.services.access import get_session as get_session_record
+from app.services.access import get_course, get_session_for_mutation as get_session_record
+from app.services.enrollments import capture_roster
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 TRANSITIONS = {"scheduled": {"active", "cancelled"}, "active": {"closed", "cancelled"},
@@ -79,18 +80,20 @@ def list_sessions(
 
 
 @router.get("/active", response_model=list[SessionResponse])
-def active_sessions(database: DatabaseSession = Depends(get_db)):
+def active_sessions(limit: int = Query(100, ge=1, le=100), offset: int = Query(0, ge=0),
+                    database: DatabaseSession = Depends(get_db)):
     now = utc_now()
     rows = database.execute(session_query().where(
         Session.status == "active", Session.checkin_opens_at <= now,
         Session.checkin_closes_at >= now, Course.is_active.is_(True)
-    ).order_by(Session.scheduled_start, Session.id)).all()
+    ).order_by(Session.scheduled_start, Session.id).limit(limit).offset(offset)).all()
     return [session_response(row) for row in rows]
 
 
 @router.get("/my-sessions", response_model=list[SessionResponse])
 def my_sessions(status: SessionStatus | None = None, upcoming: bool = False,
                 limit: int = Query(50, ge=1, le=200),
+                offset: int = Query(0, ge=0),
                 current_user: User = Depends(get_current_user),
                 database: DatabaseSession = Depends(get_db)):
     query = session_query().where(Course.is_active.is_(True))
@@ -105,7 +108,7 @@ def my_sessions(status: SessionStatus | None = None, upcoming: bool = False,
         query = query.where(Session.status == status.value)
     if upcoming:
         query = query.where(Session.scheduled_start > utc_now())
-    rows = database.execute(query.order_by(Session.scheduled_start, Session.id).limit(limit)).all()
+    rows = database.execute(query.order_by(Session.scheduled_start, Session.id).limit(limit).offset(offset)).all()
     return [session_response(row) for row in rows]
 
 
@@ -122,7 +125,7 @@ def get_session(session_id: UUID4, current_user: User = Depends(get_current_user
 def create_session(payload: SessionCreate, request: Request,
                    current_user: User = Depends(require_roles(UserRole.INSTRUCTOR, UserRole.ADMIN)),
                    database: DatabaseSession = Depends(get_db)):
-    course = get_course_or_404(database, str(payload.course_id))
+    course = get_course(database, str(payload.course_id))
     if current_user.role != "admin" and course.instructor_id is not None and course.instructor_id != current_user.id:
         raise HTTPException(status_code=403, detail="course belongs to another instructor")
     if not course.is_active:
@@ -150,19 +153,23 @@ def create_session(payload: SessionCreate, request: Request,
 def update_session(session_id: UUID4, payload: SessionUpdate, request: Request,
                    current_user: User = Depends(require_roles(UserRole.INSTRUCTOR, UserRole.ADMIN)),
                    database: DatabaseSession = Depends(get_db)):
-    session = get_session_record(database, str(session_id), lock=True)
+    session = get_session_record(database, str(session_id))
     require_session_owner(session, current_user)
+    previous_status = session.status
     changes = payload.model_dump(exclude_unset=True)
     new_status = changes.get("status", session.status)
     if new_status != session.status and new_status not in TRANSITIONS[session.status]:
         raise HTTPException(status_code=400, detail="invalid session status transition")
-    if new_status == "active" and not get_course_or_404(database, session.course_id).is_active:
+    if new_status == "active" and not get_course(database, session.course_id).is_active:
         raise HTTPException(status_code=400, detail="course is inactive")
     for field, value in changes.items():
         setattr(session, field, value)
     validate_times(session, require_future="scheduled_start" in changes)
+    if session.status == "active" and previous_status == "scheduled":
+        capture_roster(database, session)
     write_audit_log(database, request, action="session_updated", user_id=current_user.id,
-                    resource_type="session", resource_id=session.id)
+                    resource_type="session", resource_id=session.id,
+                    details={"fields": sorted(changes), "from": previous_status, "to": session.status})
     database.commit()
     return session_response(database.execute(session_query().where(Session.id == session.id)).one())
 
@@ -171,10 +178,12 @@ def update_session(session_id: UUID4, payload: SessionUpdate, request: Request,
 def delete_session(session_id: UUID4, request: Request,
                    current_user: User = Depends(require_roles(UserRole.INSTRUCTOR, UserRole.ADMIN)),
                    database: DatabaseSession = Depends(get_db)):
-    session = get_session_record(database, str(session_id), lock=True)
+    session = get_session_record(database, str(session_id))
     require_session_owner(session, current_user)
     if session.status != "scheduled":
         raise HTTPException(status_code=400, detail="only scheduled sessions can be deleted")
+    if database.scalar(select(Checkin.id).where(Checkin.session_id == session.id).limit(1)):
+        raise HTTPException(status_code=400, detail="sessions with check-ins cannot be deleted")
     write_audit_log(database, request, action="session_deleted", user_id=current_user.id,
                     resource_type="session", resource_id=session.id)
     database.delete(session)

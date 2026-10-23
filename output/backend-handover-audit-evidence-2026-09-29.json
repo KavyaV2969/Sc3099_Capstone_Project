@@ -1,0 +1,242 @@
+{
+  "date": "2026-09-29",
+  "scope": "Module 2 backend handover audit; application source unchanged in this turn",
+  "canonical_head": "20260929_0009",
+  "historical_recovery_base": "20260928_0006",
+  "fresh_backend": {
+    "tests": 389,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "passed": 389,
+    "seconds": 86.814,
+    "postgresql_cases": 74,
+    "evidence_path": "tmp/backend-handover-audit.xml"
+  },
+  "fresh_public": {
+    "tests": 67,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 1,
+    "passed": 66,
+    "seconds": 15.848,
+    "postgresql_cases": 0,
+    "evidence_path": "tmp/backend-handover-public.xml"
+  },
+  "fresh_postgresql_audit_probes": {
+    "tests": 3,
+    "failures": 3,
+    "errors": 0,
+    "skipped": 0,
+    "passed": 0,
+    "seconds": 3.792,
+    "postgresql_cases": 3,
+    "evidence_path": "tmp/backend-handover-audit/probes-postgresql.xml"
+  },
+  "probe_source": "tmp/backend-handover-audit/probes.py",
+  "confirmed_findings": [
+    {
+      "id": "H01",
+      "requirement": "session statistics/export agreement",
+      "observed": {
+        "session_checked_in": 1,
+        "export_total": 0,
+        "export_records": 0,
+        "export_approved_attendance": 1
+      }
+    },
+    {
+      "id": "H02",
+      "requirement": "approved newly eligible attendance represented in active roster",
+      "observed": {
+        "checkin_status": "approved",
+        "approved_submissions": 1,
+        "approved_attendance": 0
+      }
+    },
+    {
+      "id": "H03",
+      "requirement": "truthful retention coverage; unavailable history is not absence",
+      "observed": {
+        "explicit_range_days_ago": [
+          60,
+          45
+        ],
+        "clamped_start_after_end": true,
+        "denominator_available": true,
+        "overall_attendance_rate": 0.0
+      }
+    },
+    {
+      "id": "H04",
+      "requirement": "consistent consumer documentation",
+      "observed": "integration guide contains superseded liveness/proof guidance; recovery addendum still says head 0008"
+    },
+    {
+      "id": "H05",
+      "requirement": "real biometric interoperability",
+      "state": "external gate deferred by user"
+    }
+  ],
+  "fresh_runtime": {
+    "8000": {
+      "health": {
+        "status": "healthy",
+        "service": "backend",
+        "api": "healthy",
+        "database": "healthy",
+        "redis": "healthy",
+        "schema": "healthy"
+      },
+      "openapi_routes": 45,
+      "flagged_response_schema": {
+        "$ref": "#/components/schemas/CheckinListResponse"
+      },
+      "metrics_names_present": {
+        "http_request_duration_seconds": true,
+        "checkin_attempts_total": true,
+        "checkin_success_total": true
+      },
+      "cors_allowed_origin": "http://localhost:3000",
+      "public_catalogue_readable_without_token": true,
+      "request_id_header_present": true
+    },
+    "18000": {
+      "health": {
+        "status": "healthy",
+        "service": "backend",
+        "api": "healthy",
+        "database": "healthy",
+        "redis": "healthy",
+        "schema": "healthy"
+      },
+      "openapi_routes": 45,
+      "flagged_response_schema": {
+        "$ref": "#/components/schemas/CheckinListResponse"
+      },
+      "metrics_names_present": {
+        "http_request_duration_seconds": true,
+        "checkin_attempts_total": true,
+        "checkin_success_total": true
+      },
+      "cors_allowed_origin": "http://localhost:3000",
+      "public_catalogue_readable_without_token": true,
+      "request_id_header_present": true
+    }
+  },
+  "fresh_prometheus_targets": {
+    "prometheus": "up",
+    "saiv-backend": "up",
+    "saiv-face-recognition": "down"
+  },
+  "database_read_only_inspection": {
+    "head": "20260929_0009",
+    "application_tables": 8,
+    "audit_logs_append_only_trigger_enabled": "ALWAYS"
+  },
+  "image_inspection": {
+    "both_backend_containers_running_healthy": true,
+    "production_image": "sha256:fcdd307f75dc002593382ec7f94ba1d20b7d3b8d6994d5f68bac8f5725de962d"
+  },
+  "external_source_hash_matches_prior_release": {
+    "tests/_http_fixtures.py": true,
+    "tests/_test_helpers.py": true,
+    "tests/conftest.py": true,
+    "tests/public/test_api_functional.py": true,
+    "tests/public/test_face_recognition.py": true,
+    "tests/public/test_frontend_dashboard.py": true,
+    "tests/public/test_integration.py": true,
+    "tests/public/test_observability.py": true,
+    "tests/public/test_performance.py": true,
+    "tests/public/test_privacy_basic.py": true,
+    "tests/public/test_security_basic.py": true,
+    "tests/scoring/__init__.py": true,
+    "tests/scoring/plugin.py": true
+  },
+  "prior_release_evidence_not_rerun": {
+    "path": "output/backend-reduced-contract-evidence-2026-09-29.json",
+    "pinned_image": {
+      "passed": 315,
+      "skipped": 0,
+      "seconds": 18.54
+    },
+    "load": [
+      {
+        "concurrent_users": 10,
+        "method": "GET",
+        "route": "/users/me",
+        "requests": 30,
+        "seconds": 0.137,
+        "p95_seconds": 0.038,
+        "max_seconds": 0.062,
+        "statuses": {
+          "200": 30
+        },
+        "unexpected_errors": {},
+        "database_wait_samples": {},
+        "meets_2_second_target": true
+      },
+      {
+        "concurrent_users": 10,
+        "method": "POST",
+        "route": "/checkins/",
+        "requests": 10,
+        "seconds": 0.162,
+        "p95_seconds": 0.149,
+        "max_seconds": 0.149,
+        "statuses": {
+          "201": 10
+        },
+        "unexpected_errors": {},
+        "database_wait_samples": {
+          "IO:WALSync": 1,
+          "Lock:transactionid": 1,
+          "Lock:tuple": 3
+        },
+        "meets_2_second_target": true
+      },
+      {
+        "concurrent_users": 100,
+        "method": "GET",
+        "route": "/users/me",
+        "requests": 300,
+        "seconds": 1.108,
+        "p95_seconds": 0.435,
+        "max_seconds": 0.48,
+        "statuses": {
+          "200": 300
+        },
+        "unexpected_errors": {},
+        "database_wait_samples": {},
+        "meets_2_second_target": true
+      },
+      {
+        "concurrent_users": 100,
+        "method": "POST",
+        "route": "/checkins/",
+        "requests": 100,
+        "seconds": 1.579,
+        "p95_seconds": 1.402,
+        "max_seconds": 1.49,
+        "statuses": {
+          "201": 100
+        },
+        "unexpected_errors": {},
+        "database_wait_samples": {
+          "IO:WALSync": 3,
+          "Lock:transactionid": 2,
+          "Lock:tuple": 4
+        },
+        "meets_2_second_target": true
+      }
+    ],
+    "backups": {
+      "pre_upgrade_restore_verified": true,
+      "final_restore_verified": true,
+      "final_restored_schema_strict_ready": true,
+      "existing_integration_rows_preserved": true
+    },
+    "historical_migrations_contracts_unchanged": true
+  },
+  "verdict": "Marking-compatible; reporting fixes and documentation reconciliation required before full backend handover; real face interoperability deferred"
+}

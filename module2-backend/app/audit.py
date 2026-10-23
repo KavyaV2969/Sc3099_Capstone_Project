@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.models import AuditLog
 from app.rate_limit import client_ip
+from app.metrics import request_id
 
 
 def write_audit_log(
@@ -28,7 +29,8 @@ def write_audit_log(
         device_id=device_id,
         ip_address=client_ip(request)[:45] if request.client or request.headers.get("x-forwarded-for") else None,
         user_agent=request.headers.get("user-agent", "")[:500] or None,
-        details=details,
+        details={**(details or {}), "schema_version": 1,
+                 "request_id": getattr(request.state, "request_id", "") or request_id.get() or None},
         success=success,
     )
     database.add(event)

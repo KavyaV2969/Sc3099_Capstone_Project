@@ -1,9 +1,21 @@
 # Local Python virtual environment
 .venv/
 
-# Locally generated or working documentation
-docs/
-
-#pycache 
+# Python bytecode
 __pycache__/
 *.pyc
+
+# Locally generated or working documentation. Keep grading overrides trackable.
+docs/*
+!docs/GRADING-CLARIFICATIONS.md
+!docs/F00-DATABASE-RECOVERY.md
+!docs/CHECKIN-VERIFICATION-REPAIR.md
+!docs/BACKEND-COMPLETION.md
+!docs/BACKEND-DEVIATIONS.md
+.env
+
+# Local scratch: test runs, recovery evidence and private PostgreSQL backups.
+tmp/
+
+# Local-only audit reports.
+output/backend-final-audit-2026-10-13.md
