@@ -22,10 +22,8 @@ function errorText(err: any, fallback: string): string {
 }
 
 const CHALLENGES = [
-  "Blink twice",
-  "Turn your head slightly left",
-  "Turn your head slightly right",
-  "Smile",
+  "Blink",
+  "Turn your head slightly"
 ];
 
 function CheckinContent() {
