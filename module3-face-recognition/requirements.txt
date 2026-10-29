@@ -16,6 +16,7 @@ opencv-python>=4.9.0.80,<4.12  # 4.12+ requires numpy>=2, unsupported by mediapi
 numpy>=1.24.3,<2
 pillow>=10.2.0
 facenet-pytorch == 2.6.0
+uniface[cpu]==4.1.0
 # face-recognition==1.3.0  # Optional - has Python 3.12 compatibility issues
 
 # Observability
@@ -23,6 +24,7 @@ opentelemetry-api==1.22.0
 opentelemetry-sdk==1.22.0
 opentelemetry-instrumentation-fastapi==0.43b0
 opentelemetry-exporter-otlp==1.22.0
+prometheus-client==0.19.0
 
 # Testing
 pytest==7.4.4
