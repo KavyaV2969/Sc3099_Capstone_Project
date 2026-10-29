@@ -24,18 +24,21 @@ import mediapipe as mp
 import threading
 import cv2
 import torch
+import math
+import time 
+from uniface.spoofing import MiniFASNet, MiniFASNetWeights
 from facenet_pytorch import InceptionResnetV1
 from io import BytesIO
 from PIL import Image
-from fastapi import FastAPI, HTTPException
+from prometheus_client import Counter, Gauge, Histogram, generate_latest, CONTENT_TYPE_LATEST
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.concurrency import run_in_threadpool 
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from pydantic import BaseModel, Field
-from typing import Optional, Dict, List, Any, Literal
+from typing import Annotated, Optional, Dict, List, Any, Literal, Union
 
 #### CONFIGURATIONS 
-
 FACENET_INPUT_SIZE = 160
 FACE_CROP_MARGIN = 0.15
 EMBEDDING_DIM = 512
@@ -54,28 +57,33 @@ MAX_IMAGE_BYTES = 10*1024*1024 #image above 10MB size to be rejected
 MIN_FACE_SIZE_PX = 40 #facenet reqs 160x160 so if face size in pixels is too small, the embedding would be inaccurate 
 
 LIVENESS_THRESHOLD = 0.6
-LIVENESS_WEIGHTS = {
-    "depth" : 0.30, 
-    "mesh" : 0.25,
-    "texture" : 0.25,
-    "color" : 0.20
-}
+# LIVENESS_WEIGHTS = {
+#     "depth" : 0.30, 
+#     "mesh" : 0.25,
+#     "texture" : 0.25,
+#     "color" : 0.20
+# }
+LIVENESS_MODEL = "MiniFASNetV2 (uniface)"
 
 FACE_MESH_LANDMARKS = 468
 MESH_CROP_MARGIN = 0.5
 DEPTH_FLAT_Z = 0.01
 DEPTH_REAL_Z = 0.05
 
-TEXTURE_BLUR_VAR = 50.0
-TEXTURE_SHARP_VAR = 200.0
-TEXTURE_MOIRE_VAR = 1000.0
-SKIN_RATIO_FULL = 0.5
-SKIN_CR_STD_FLAT = 3.0
-SKIN_CR_STD_FULL = 7.0
-SKIN_CR_RANGE = (133,173)
-SKIN_CB_RANGE = (77,127)
-SPOOF_CUE_FLOOR = 0.3
-SPOOF_SCORE_CAP = 0.5
+MAX_CHALLENGE_FRAMES = 30
+KEY_FRAME_SAMPLES = 4
+EAR_MIN_OPEN = 0.15
+BLINK_OPEN_RATIO = 0.8
+BLINK_CLOSED_RATIO = 0.55
+HEAD_TURN_MIN_DEG = 20
+SAME_PERSON_HAMMING_MAX = 80
+CHALLENGE_FAILED_SCORE_CAP = 0.3
+
+RIGHT_EYE_EAR = [33, 160, 158, 133, 153, 144]
+LEFT_EYE_EAR = [362, 385, 387, 263, 373, 380]
+FACE_EDGE_IMAGE_LEFT = 234
+FACE_EDGE_IMAGE_RIGHT = 454
+NOSE_TIP = 1
 
 RISK_WEIGHTS = {
     "liveness" : 0.25,
@@ -96,11 +104,64 @@ GEO_POOR_M = 5000
 GEO_RISK_THRESHOLD = 0.5
 
 VPN_KEYWORDS = ["vpn", "proxy", "tunnel", "tor"]
+#PROMETHEUS METRICS
+HTTP_REQUESTS = Counter("http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"])
+HTTP_LATENCY = Histogram("http_request_duration_seconds", "HTTP request latency", ["method", "endpoint"], buckets=(0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10))
+HTTP_IN_FLIGHT = Gauge("http_requests_in_progress", "Requests currently being processed")
+
+ENROLL_RESULTS = Counter("face_enroll_total", "Enrollment outcomes", ["result"])
+VERIFY_RESULTS = Counter("face_verify_total", "Verification outcomes", ["result"])
+VERIFY_HAMMING = Histogram("face_verify_hamming_distance", "SimHash Hamming Distance probe vs reference", buckets=(10, 20, 30, 40, 50, 60, 70, 80, 100, 128, 256))
+LIVENESS_RESULTS = Counter("face_liveness_total", "Liveness outcomes", ["challenge_type", "result"])
+RISK_LEVELS = Counter("face_risk_assess_total", "Risk assessment by level", ["level"])
+RISK_SCORE = Histogram("face_risk_score", "Distribution of risk scores", buckets =(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0))
 
 
 
 # =============================================================================
-# MODEL LOADING ON APP STARTUP
+#ANTI-SPOOF MODEL LOADING ON APP STARTUP
+# =============================================================================
+ANTI_SPOOF_REAL_INDEX = 1 #model outputs 3 classes - index 1 refers to the real face
+
+anti_spoof_model : Optional[MiniFASNet] = None
+anti_spoof_lock = threading.Lock()
+
+def get_anti_spoof_model() -> MiniFASNet:
+    global anti_spoof_model
+    if anti_spoof_model is None:
+        with anti_spoof_lock:
+            if anti_spoof_model is None:
+                model = MiniFASNet(model_name=MiniFASNetWeights.V2, providers=["CPUExecutionProvider"])
+                width, height = model.input_size
+                model.session.run(None, {model.input_name : np.zeros((1, 3, height, width), np.float32)})
+                anti_spoof_model = model
+    return anti_spoof_model
+
+def predict_spoof(image_rgb: np.ndarray, bbox_xywh: List[int]) -> dict:
+    model = get_anti_spoof_model()
+    x,y,w,h = bbox_xywh
+    image_bgr = cv2.cvtColor(image_rgb, cv2.COLOR_RGB2BGR)
+
+    try:
+        blob = model.preprocess(image_bgr, [x, y, x + w, y + h])
+        logits = model.session.run(None, {model.input_name: blob})[0][0].astype(np.float64)
+    finally:
+        del image_bgr
+
+    probs = np.exp(logits - logits.max())
+    probs /= probs.sum()
+    real_prob = float(probs[ANTI_SPOOF_REAL_INDEX])
+
+    return{
+        "real_probability" : real_prob,
+        "spoof_probability" : 1.0 - real_prob,
+        "predicted_label" : "real" if int(np.argmax(probs)) == ANTI_SPOOF_REAL_INDEX else "spoof"
+    }
+
+
+
+# =============================================================================
+#FACE EMBEDDING MODEL LOADING ON APP STARTUP
 # =============================================================================
 
 facenet_model: Optional[InceptionResnetV1] = None
@@ -119,6 +180,9 @@ async def lifespan(app : FastAPI):
     print("lifespan: loading facenet!")
     get_facenet_model()
     print("lifespan: facenet ready!")
+    print("lifespan: loading anti-spoof model!")
+    get_anti_spoof_model()
+    print("lifespan: anti-spoof model ready!")
     yield
 
 app = FastAPI(
@@ -130,12 +194,109 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:3000", "http://localhost:8501"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+async def prometheus_middleware(request: Request, call_next):
+    if request.url.path == "/metrics":
+        return await call_next(request)
+    HTTP_IN_FLIGHT.inc()
+    start = time.perf_counter()
+    status = 500
+    try:
+        response = await call_next(request)
+        status = response.status_code
+        return response
+    finally:
+        route = request.scope.get("route")
+        endpoint = route.path if route else "unmatched"
+        HTTP_LATENCY.labels(request.method, endpoint).observe(time.perf_counter() - start)
+        HTTP_REQUESTS.labels(request.method, endpoint, str(status)).inc()
+        HTTP_IN_FLIGHT.dec()
+
+########################################JUST FOR TESTING
+import json
+import time
+from fastapi import Request
+from fastapi.responses import Response
+
+# =============================================================================
+# DEBUG: HTTP REQUEST/RESPONSE LOGGING
+# =============================================================================
+
+DEBUG_HTTP = True                                  # set False to switch off
+REDACT_KEYS = {"image", "challenge_response"}      # base64 image fields
+MAX_STR_LEN = 120                                  # shorten any other long strings
+
+
+def redact(obj):
+    """Recursively shorten image fields and long strings so logs stay readable."""
+    if isinstance(obj, dict):
+        return {
+            k: (f"<base64 image, {len(v)} chars>" if k in REDACT_KEYS and isinstance(v, str) else redact(v))
+            for k, v in obj.items()
+        }
+    if isinstance(obj, list):
+        return [redact(x) for x in obj]
+    if isinstance(obj, str) and len(obj) > MAX_STR_LEN:
+        return obj[:MAX_STR_LEN] + f"...<{len(obj)} chars total>"
+    return obj
+
+
+def format_body(raw: bytes) -> str:
+    if not raw:
+        return "<empty>"
+    try:
+        return json.dumps(redact(json.loads(raw)), indent=2, default=str)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return f"<{len(raw)} bytes, not JSON>"
+
+
+@app.middleware("http")
+async def log_http(request: Request, call_next):
+    if not DEBUG_HTTP or request.url.path == "/metrics":
+        return await call_next(request)
+
+    start = time.perf_counter()
+    client = request.client.host if request.client else "?"
+    req_body = await request.body()
+
+    print(f"\n{'=' * 70}", flush=True)
+    print(f">>> {request.method} {request.url.path}  (from {client})", flush=True)
+    if request.query_params:
+        print(f">>> query: {dict(request.query_params)}", flush=True)
+    print(f">>> content-type: {request.headers.get('content-type')}", flush=True)
+    print(f">>> body:\n{format_body(req_body)}", flush=True)
+
+    try:
+        response = await call_next(request)
+    except Exception as e:
+        ms = (time.perf_counter() - start) * 1000
+        print(f"!!! UNHANDLED {type(e).__name__} on {request.url.path} after {ms:.0f} ms: {e}", flush=True)
+        raise
+
+    # Read the response body so we can print it, then rebuild the response
+    resp_body = b"".join([chunk async for chunk in response.body_iterator])
+    ms = (time.perf_counter() - start) * 1000
+
+    print(f"<<< {response.status_code} {request.url.path}  ({ms:.0f} ms)", flush=True)
+    print(f"<<< body:\n{format_body(resp_body)}", flush=True)
+    print(f"{'=' * 70}", flush=True)
+
+    return Response(
+        content=resp_body,
+        status_code=response.status_code,
+        headers=dict(response.headers),
+        media_type=response.media_type,
+    )
+
+
+
+################## REMOVE ABOVE
 
 # =============================================================================
 # REQUEST/RESPONSE MODELS
@@ -184,7 +345,7 @@ class FaceMatchResponse(BaseModel):
 
 class LivenessRequest(BaseModel):
     """Request model for liveness check."""
-    challenge_response: str  # Base64 encoded image
+    challenge_response: Union[str, Annotated[List[str], Field(min_length=1, max_length=MAX_CHALLENGE_FRAMES)]]
     challenge_type: Literal["passive", "blink", "head_turn"] = "passive"  # blink, head_turn, passive
 
 
@@ -235,6 +396,10 @@ async def health_check():
     """Basic health check endpoint."""
     return {"status": "healthy", "service": "SAIV Face Recognition & Risk Service"}
 
+@app.get("/metrics", include_in_schema=False)
+async def metrics():
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
 
 @app.get("/")
 async def root():
@@ -248,7 +413,8 @@ async def root():
             "/face/verify":"POST - Verify a face against enrolled template",
             "/face/match": "POST - Legacy face matching (use /face/verify)",
             "/liveness/check":"POST - Perform liveness detection",
-            "/risk/assess":"POST - Multi-signal risk assessment"
+            "/risk/assess":"POST - Multi-signal risk assessment",
+            "/metrics" : "GET - Prometheus metrics"
         }
     }
 
@@ -281,9 +447,15 @@ async def enroll_face(request: FaceEnrollRequest):
     - Returns 64-char SHA-256 hex hash
     """
     if not request.camera_consent:
+        ENROLL_RESULTS.labels("no_consent").inc()
         raise HTTPException(status_code=400, detail="Camera consent required!")
 
-    result = await run_in_threadpool(process_enrollment, request.image)
+    try:
+        result = await run_in_threadpool(process_enrollment, request.image)
+    except HTTPException:
+        ENROLL_RESULTS.labels("rejected").inc()
+        raise
+    ENROLL_RESULTS.labels("success").inc()
 
     return FaceEnrollResponse(
         enrollment_successful = True, 
@@ -320,11 +492,20 @@ async def verify_face(request: FaceVerifyRequest):
     scores, consider perceptual hashing or embedding similarity.
     """
     if not is_valid_template_hash(request.reference_template_hash):
+        VERIFY_RESULTS.labels("invalid_hash").inc()
         raise HTTPException(status_code=400, detail= "Invalid reference_template_hash (expected 64 hex characters)")
 
-    result = await run_in_threadpool(
-        process_verification, request.image, request.reference_template_hash
-    )
+    try:
+        result = await run_in_threadpool(
+            process_verification, request.image, request.reference_template_hash
+        )
+    except HTTPException:
+        VERIFY_RESULTS.labels("error").inc()
+        raise
+    if not result["face_detected"]:
+        VERIFY_RESULTS.labels("no_face").inc()
+    else:
+        VERIFY_RESULTS.labels("match" if result["match_passed"] else "no_match").inc()
 
     return FaceVerifyResponse(
         match_passed=result["match_passed"],
@@ -397,10 +578,18 @@ async def check_liveness(request: LivenessRequest):
     - Real faces: |nose_tip_z| > 0.03 (significant depth)
     - Flat images: |nose_tip_z| < 0.01 (minimal depth)
     """
-    if request.challenge_type != "passive":
-        raise HTTPException(status_code=400, detail=f"Challenge type '{request.challenge_type}' not supported yet! Use 'passive'!")
 
-    result = await run_in_threadpool(process_liveness, request.challenge_response)
+    if isinstance(request.challenge_response, list):
+        frames = request.challenge_response
+    else:
+        frames = [request.challenge_response]
+
+    try:
+        result = await run_in_threadpool(process_liveness, frames[0], request.challenge_type, frames[1:])
+    except HTTPException:
+        LIVENESS_RESULTS.labels(request.challenge_type, "error").inc()
+        raise
+    LIVENESS_RESULTS.labels(request.challenge_type, "passed" if result["liveness_passed"] else "failed").inc()
 
     return LivenessResponse(
         liveness_passed=result["liveness_passed"],
@@ -409,7 +598,6 @@ async def check_liveness(request: LivenessRequest):
         challenge_type=request.challenge_type,
         face_embedding_hash=result["face_embedding_hash"],
         details = result["details"]
-        
     )    
 
 
@@ -470,15 +658,31 @@ async def assess_risk(request: RiskAssessRequest):
             recommendations.append(recommendation)
 
     risk_score = round(sum(contributions.values()), 2)
+    level = risk_level_readable(risk_score)
+    RISK_LEVELS.labels(level).inc()
+    RISK_SCORE.observe(risk_score)
 
     return RiskAssessResponse(
         risk_score = risk_score,
-        risk_level = risk_level_readable(risk_score),
+        risk_level = level,
         pass_threshold = risk_score < RISK_THRESHOLD,
         risk_threshold = RISK_THRESHOLD,
         signal_breakdown = {name: round(value, 2) for name, value in contributions.items()},
         recommendations = recommendations
     )
+
+####Reusing mediapipe models instead of always rebuilding on every http call -> reduce latency
+mediapipe_local = threading.local()
+
+def get_face_detector():
+    if not hasattr(mediapipe_local, "face_detection"):
+        mediapipe_local.face_detection = mp.solutions.face_detection.FaceDetection(model_selection = 0, min_detection_confidence = 0.5)
+    return mediapipe_local.face_detection
+
+def get_face_mesh():
+    if not hasattr(mediapipe_local, "face_mesh"):
+        mediapipe_local.face_mesh = mp.solutions.face_mesh.FaceMesh(static_image_mode = True, max_num_faces = 1, refine_landmarks = True, min_detection_confidence = 0.5)
+    return mediapipe_local.face_mesh
 
 
 # =============================================================================
@@ -520,24 +724,22 @@ def detect_face(image_array):
     Detect faces in an image using MediaPipe.
 
     TODO: Implement using:
-    - mediapipe.solutions.face_detection.FaceDetection
-      (requires mediapipe==0.10.18 as pinned in requirements.txt; mediapipe
-      >= 0.10.30 removed `mediapipe.solutions` in favour of `mediapipe.tasks`)
-    - Return detection results with confidence scores
+    - mediapipe.solutions.face_detection.eDetection
+      (requires mediapipe==0.10.18 as  in requirements.txt; mediapipe
+      >= 0.10.30 removed `mediapipe.s` in favour of `mediapipe.tasks`)
+    - Return detection results with ce scores
 
-    Consider setting min_detection_confidence=0.5
+    Consider setting e=0.5
     """
-    mp_face_detection = mp.solutions.face_detection
-    with mp_face_detection.FaceDetection(model_selection = 0, min_detection_confidence = 0.5) as face_detection:
-        results = face_detection.process(image_array)
+    results = get_face_detector().process(image_array)
 
-        if not results.detections:
-            return {"detected" : False, "confidence" : 0.0}
+    if not results.detections:
+        return {"detected" : False, "confidence" : 0.0}
 
-        detection = results.detections[0]
-        confidence = detection.score[0]
+    detection = results.detections[0]
+    confidence = detection.score[0]
 
-        return {"detected" : True, "confidence" : confidence, "bounding_box" : detection.location_data.relative_bounding_box} 
+    return {"detected" : True, "confidence" : confidence, "bounding_box" : detection.location_data.relative_bounding_box} 
 
 
 def bbox_to_pixels(bbox, width: int, height: int):
@@ -610,7 +812,7 @@ def extract_face_embedding(image_array, detection):
     tensor = torch.from_numpy(face).permute(2, 0, 1).unsqueeze(0)
 
     with torch.no_grad():
-        embedding = facenet_model(tensor)
+        embedding = get_facenet_model()(tensor)
 
     return embedding[0].numpy()
 
@@ -716,6 +918,7 @@ def process_verification(image_b64: str, reference_hash: str) -> dict:
             raise HTTPException(status_code=400, detail=f"Could not process face: {e}")
 
         distance = hamming_distance(current_hash, reference_hash)
+        VERIFY_HAMMING.observe(distance)
         match_score = hamming_to_match_score(distance)
 
         return{
@@ -730,7 +933,15 @@ def process_verification(image_b64: str, reference_hash: str) -> dict:
         del embedding
 
 
+def eye_aspect_ratio(pts: np.ndarray, idx: List[int]) -> float:
+    p = pts[idx, :2]
+    vertical = math.dist(p[1], p[5]) + math.dist(p[2], p[4])
+    width = math.dist(p[0], p[3])
+    return vertical / (2 * width)
 
+def head_yaw_deg(pts):
+    left, right = pts[FACE_EDGE_IMAGE_LEFT], pts[FACE_EDGE_IMAGE_RIGHT]
+    return math.degrees(math.atan2(right[2] - left[2], right[0] - left[0]))
 
 
 def analyze_face_mesh(image_array):
@@ -749,25 +960,27 @@ def analyze_face_mesh(image_array):
     - nose_tip_z: float
     - depth_quality: "good" | "moderate" | "poor"
     """
-    mp_face_mesh = mp.solutions.face_mesh
-    with mp_face_mesh.FaceMesh(static_image_mode=True, max_num_faces=1, refine_landmarks=False, min_detection_confidence = 0.5) as face_mesh:
-        results = face_mesh.process(image_array)
+    h, w = image_array.shape[:2]
+    results = get_face_mesh().process(image_array)
 
     if not results.multi_face_landmarks:
         return{
-            "face_mesh_complete" : False, 
+            "found" : False,
+            "face_mesh_complete" : False,
             "landmark_count" : 0,
             "in_frame_ratio" : 0.0,
             "nose_tip_z" : 0.0,
-            "depth_quality" : "poor"
+            "depth_quality" : "poor",
+            "eye_aspect_ratio" : None,
+            "head_yaw_deg" : None
         }
+
     landmarks = results.multi_face_landmarks[0].landmark
     landmark_count = len(landmarks)
+    pts = np.array([[lm.x * w, lm.y * h, lm.z * w] for lm in landmarks])
 
-    in_frame = sum(1 for landmark in landmarks if 0 <= landmark.x <= 1 and 0 <= landmark.y <= 1)
-    in_frame_ratio = in_frame / FACE_MESH_LANDMARKS
-
-    nose_tip_z = landmarks[1].z
+    in_frame = sum(1 for landmark in landmarks if 0<= landmark.x <= 1 and 0 <= landmark.y <= 1)
+    nose_tip_z = landmarks[NOSE_TIP].z
 
     if nose_tip_z < -DEPTH_REAL_Z:
         depth_quality = "good"
@@ -776,54 +989,32 @@ def analyze_face_mesh(image_array):
     else:
         depth_quality = "poor"
 
-    return {
-            "face_mesh_complete" : landmark_count >= FACE_MESH_LANDMARKS and in_frame == landmark_count,     
+    return{
+            "found" : True,
+            "face_mesh_complete" : landmark_count >= FACE_MESH_LANDMARKS and in_frame == landmark_count,
             "landmark_count" : landmark_count,
-            "in_frame_ratio" : round(in_frame_ratio, 2),
+            "in_frame_ratio" : round(in_frame / landmark_count, 2),
             "nose_tip_z" : round(nose_tip_z, 2),
-            "depth_quality" : depth_quality
+            "depth_quality" : depth_quality,
+            "eye_aspect_ratio" : round((eye_aspect_ratio(pts, RIGHT_EYE_EAR) + eye_aspect_ratio(pts, LEFT_EYE_EAR)) / 2 ,3),
+            "head_yaw_deg" : round(head_yaw_deg(pts), 2)
     }
-
-def depth_score_from_z(nose_tip_z: float) -> float:
-    score = (-nose_tip_z - DEPTH_FLAT_Z) / (DEPTH_REAL_Z - DEPTH_FLAT_Z)
-    return round(min(1.0, max(0.0, score)), 2)
 
 def crop_face_region (image_array, detection, margin: float):
     h,w = image_array.shape[:2]
     x0,y0,x1,y1 = bbox_to_pixels(detection["bounding_box"], w ,h)
     pad_x = int((x1 - x0) * margin)
-    pad_y = int((y1-y0) * margin)
+    pad_y = int((y1 - y0) * margin)
     return image_array[max(0, y0 - pad_y):min(h, y1 + pad_y), max(0, x0 - pad_x):min(w, x1 + pad_x)]
 
-def analyse_texture(face_crop) -> float:
-    gray = cv2.cvtColor(face_crop, cv2.COLOR_RGB2GRAY)
-    variance = float(cv2.Laplacian(gray, cv2.CV_64F).var())
+def bbox_to_xywh(bbox, width: int, height: int) -> List[int]:
+    x0,y0,x1,y1 = bbox_to_pixels(bbox, width ,height)
+    return(x0, y0, x1-x0, y1-y0)
 
-    if variance > TEXTURE_MOIRE_VAR:
-        score = 1.0 - (variance - TEXTURE_MOIRE_VAR) / TEXTURE_MOIRE_VAR
-    else:
-        score = (variance - TEXTURE_BLUR_VAR) / (TEXTURE_SHARP_VAR - TEXTURE_BLUR_VAR)
-    return round(min(1.0, max(0.0, score)), 2)
 
-def analyse_skin_color(face_crop) -> float:
-    ycrcb = cv2.cvtColor(face_crop, cv2.COLOR_RGB2YCrCb)
-    cr = ycrcb[:, :, 1]
-    cb = ycrcb[:, :, 2]
-    skin = (
-        (cr >= SKIN_CR_RANGE[0]) & (cr <= SKIN_CR_RANGE[1]) &
-        (cb >= SKIN_CB_RANGE[0]) & (cb <= SKIN_CB_RANGE[1])
-    )
 
-    skin_ratio = float(skin.mean())
-    if skin_ratio == 0:
-        return 0.0
 
-    cr_std = float(cr[skin].std())
-    ratio_score = min(1.0, skin_ratio / SKIN_RATIO_FULL)
-    variance_score = min(1.0, max(0.0, (cr_std - SKIN_CR_STD_FLAT) / (SKIN_CR_STD_FULL - SKIN_CR_STD_FLAT)))
-    return round(0.5 * ratio_score + 0.5 * variance_score, 2)
-
-def liveness_failed_result(reason:str, face_detected: bool, confidence: float) ->  dict:
+def liveness_failed_result(reason:str, face_detected: bool, confidence: float, **extra) ->  dict:
     return{
         "liveness_passed" : False, 
         "liveness_score" : 0.0,
@@ -834,94 +1025,213 @@ def liveness_failed_result(reason:str, face_detected: bool, confidence: float) -
             "face_mesh_complete" : False,
             "depth_detected" : False,
             "texture_analysis_score" : 0.0,
+            "spoof_suspected" : True,
+            "model" : LIVENESS_MODEL,
             "threshold" : LIVENESS_THRESHOLD,
-            "reason" : reason
+            "reason" : reason,
+            **extra
         }
     }
 
-def process_liveness(image_b64: str) -> dict:
+class FrameRejected(Exception): 
+    def __init__(self, reason: str, face_detected: bool = True, confidence: float = 0.0):
+        super().__init__(reason)
+        self.face_detected = face_detected
+        self.confidence = confidence
+
+def scan_frame(image_b64: str, frame_no: int, quality_gate: bool) -> dict:
     image_array = None
-    embedding = None
-    face_crop = None
     try:
         image_array = decode_base64_image(image_b64)
         if image_array is None:
-            raise HTTPException(status_code=400, detail="Invalid image data!")
-
+            raise HTTPException(status_code=400, detail=f"Invalid image data in frame number {frame_no}!")
         detection = detect_face(image_array)
         if not detection["detected"]:
-            return liveness_failed_result("No face detected", face_detected=False, confidence = 0.0)
+            raise FrameRejected(f"No face detected in frame number {frame_no}!", face_detected=False)
 
         confidence = round(detection["confidence"], 2)
-        try:
-            face_crop = crop_for_facenet(image_array, detection)
-        except ValueError as e:
-            return liveness_failed_result(str(e), face_detected=True, confidence = confidence)
-
+        h,w = image_array.shape[:2]
+        bbox_xywh = bbox_to_xywh(detection["bounding_box"], w, h)
+        if bbox_xywh[2] < MIN_FACE_SIZE_PX or bbox_xywh[3] < MIN_FACE_SIZE_PX:
+            raise FrameRejected(f"Face too small in frame {frame_no} ({bbox_xywh[2]}x{bbox_xywh[3]}px)", confidence=confidence)
         quality_score = compute_quality_score(detection["confidence"], image_array, detection["bounding_box"])
-        if confidence < ENROLL_MIN_CONFIDENCE or quality_score < ENROLL_MIN_QUALITY:
-            return liveness_failed_result(f"Face image quality too low (confidence {confidence:.2f}, quality {quality_score:.2f})", face_detected=True, confidence=confidence)
-
-        mesh = analyze_face_mesh(crop_face_region(image_array, detection, MESH_CROP_MARGIN))
-        depth_score = depth_score_from_z(mesh["nose_tip_z"])
-        mesh_score = mesh["in_frame_ratio"]
-        texture_score = analyse_texture(face_crop)
-        color_score = analyse_skin_color(face_crop)
-
-        liveness_score = round(
-            LIVENESS_WEIGHTS["depth"] * depth_score + 
-            LIVENESS_WEIGHTS["mesh"] * mesh_score +
-            LIVENESS_WEIGHTS["texture"] * texture_score +
-            LIVENESS_WEIGHTS["color"] * color_score, 2
-        )
-
-        spoof_suspected = texture_score < SPOOF_CUE_FLOOR or color_score < SPOOF_CUE_FLOOR
-        if spoof_suspected:
-            liveness_score = min(liveness_score, SPOOF_SCORE_CAP)
-
-        embedding = extract_face_embedding(image_array, detection)
-        face_hash = generate_face_hash(embedding)
+        if quality_gate and (confidence < ENROLL_MIN_CONFIDENCE or quality_score < ENROLL_MIN_QUALITY):
+            raise FrameRejected(f"Face image quality too low in frame {frame_no} (confidence = {confidence:.2f}, quality = {quality_score:.2f})", confidence = confidence)
 
         return{
-            "liveness_passed" : liveness_score >= LIVENESS_THRESHOLD,
-            "liveness_score" : liveness_score,
-            "face_embedding_hash" : face_hash,
-            "details" : {
-                "face_detected" : True, 
-                "face_detection_confidence" : confidence,
-                "quality_score" : quality_score,
-                "image_quality" : image_quality_label(quality_score),
-                "face_mesh_complete" : mesh["face_mesh_complete"],
-                "landmark_count" : mesh["landmark_count"],
-                "depth_detected" : mesh["depth_quality"] != "poor",
-                "depth_quality" : mesh["depth_quality"],
-                "nose_tip_z" : mesh["nose_tip_z"],
-                "depth_score" : depth_score,
-                "mesh_score" : mesh_score, 
-                "texture_analysis_score" : texture_score,
-                "color_score" : color_score,
-                "spoof_suspected" : spoof_suspected,
-                "threshold" : LIVENESS_THRESHOLD
-            }
+            "frame_no" : frame_no,
+            "detection" : detection,
+            "bbox_xywh" : bbox_xywh,
+            "confidence" : confidence,
+            "quality_score" : quality_score,
+            "mesh" : analyze_face_mesh(crop_face_region(image_array, detection, MESH_CROP_MARGIN))
+        }
+    finally:
+        del image_array
+
+def verify_frame(image_b64: str, scan: dict) -> dict:
+    image_array = None
+    embedding = None
+    try:
+        image_array = decode_base64_image(image_b64)
+        try:
+            spoof = predict_spoof(image_array, scan["bbox_xywh"])
+        except ValueError as e:
+            raise FrameRejected(f"Could not analyse face in frame {scan['frame_no']} : {e}", confidence = scan["confidence"])
+        embedding = extract_face_embedding(image_array, scan["detection"])
+        return {
+            "real_probability" : spoof["real_probability"],
+            "face_hash" : generate_face_hash(embedding)
         }
     finally:
         del image_array
         del embedding
-        del face_crop
+
+def detect_blink(frames: List[dict]) -> dict:
+    eye_aspect_ratios = [frame["mesh"]["eye_aspect_ratio"] for frame in frames]
+    open_level = max(eye_aspect_ratios)
+    is_open = [e >= BLINK_OPEN_RATIO * open_level for e in eye_aspect_ratios]
+    is_closed = [e <= BLINK_CLOSED_RATIO * open_level for e in eye_aspect_ratios]
+
+    blink_at = None
+    for i in range(len(eye_aspect_ratios)):
+        if is_closed[i] and any(is_open[:i]) and any(is_open[i + 1:]):
+            if blink_at is None or eye_aspect_ratios[i] < eye_aspect_ratios[blink_at]:
+                blink_at = i
+
+    completed = blink_at is not None and open_level >= EAR_MIN_OPEN
+    if open_level < EAR_MIN_OPEN:
+        reason = "Eyes never clearly open"
+    elif completed:
+        reason = f"Blink detected at frame {frames[blink_at]['frame_no']}"
+    elif any(is_closed):
+        reason = "Eyes closed but never open before or after blink detected"
+    else:
+        reason = "No blink detected"
+
+    return{
+        "challenge_completed" : completed,
+        "challenge_reason" : reason,
+        "event_index" : blink_at,
+        "eye_aspect_ratios" : eye_aspect_ratios
+    }
+
+def check_head_turn(frames: List[dict]) -> dict:
+    yaws = [frame["mesh"]["head_yaw_deg"] for frame in frames]
+    span = max(yaws) - min(yaws)
+    completed = span >= HEAD_TURN_MIN_DEG
+    turned_at = int(np.argmax(np.abs(np.array(yaws) - yaws[0])))
+    return{
+        "challenge_completed" : completed,
+        "challenge_reason" : f"Head turned {span:.0f} degrees" if completed else f"Head turn too small ({span:.0f} < {HEAD_TURN_MIN_DEG} degrees)",
+        "event_index" : turned_at if completed else None,
+        "head_yaw_degrees" : yaws,
+        "head_turn_direction" : ("image_right" if yaws[turned_at] > yaws[0] else "image_left") if completed else None
+    }
+
+def pick_key_frames(n_frames: int, event_index: Optional[int]) -> List[int]:
+    keys = {0}
+    if event_index is not None:
+        keys.add(event_index)
+    if n_frames > 1:
+        step = (n_frames - 1) / KEY_FRAME_SAMPLES
+        keys.update(round(step * i) for i in range(1, KEY_FRAME_SAMPLES + 1))
+    return sorted(keys)
 
 
+def process_liveness(image_b64: str, challenge_type: str = "passive", extra_frames: Optional[List[str]] = None) -> dict:
+    is_challenge = challenge_type != "passive"
+    frames_b64 = [image_b64] + (list(extra_frames or []) if is_challenge else [])
 
+    if is_challenge and len(frames_b64) < 2:
+        return liveness_failed_result(
+            f"'{challenge_type}' challenge needs at least 2 frames: send a list of frames in 'challenge_response'",
+            face_detected=False, confidence=0.0, challenge_completed = False
+        )
+    usable, skipped = [],[]
+    for i, frame_b64 in enumerate(frames_b64):
+        try:
+            scan = scan_frame(frame_b64, i, quality_gate=(i == 0))
+        except FrameRejected as e:
+            if i == 0:
+                return liveness_failed_result(str(e), face_detected= e.face_detected, confidence=e.confidence)
+            skipped.append(i)
+            continue
+        if is_challenge and not scan["mesh"]["found"]:
+            if i == 0:
+                return liveness_failed_result("Face landmarks not found in frame 0", face_detected=True, confidence=scan["confidence"], challenge_completed = False)
+            skipped.append(i)
+            continue
+        scan["b64"] = frame_b64
+        usable.append(scan)
 
-def detect_blink(face_mesh_landmarks):
-    """
-    Detect eye blink from face mesh landmarks (BONUS).
+    ref = usable[0]
+    if is_challenge and len(usable) < 2:
+        return liveness_failed_result(f"Not enough usable frames ({len(usable)} of {len(frames_b64)})",
+                                      face_detected=True, confidence=ref["confidence"], challenge_completed = False)
 
-    TODO: Implement using:
-    - Eye landmark indices (see MediaPipe docs)
-    - Calculate Eye Aspect Ratio (EAR)
-    - EAR < threshold indicates closed eye
-    """
-    pass
+    challenge = {}
+    if is_challenge:
+        challenge = detect_blink(usable) if challenge_type == "blink" else check_head_turn(usable)
+    challenge_ok = challenge.get("challenge_completed", True)
+    event_index = challenge.pop("event_index", None)
+
+    keys = pick_key_frames(len(usable), event_index) if challenge_ok else [0]
+    verified = {}
+    for k in keys:
+        try:
+            verified[k] = verify_frame(usable[k]["b64"], usable[k])
+        except FrameRejected as e:
+            if k == 0:
+                return liveness_failed_result(str(e), face_detected=e.face_detected, confidence=e.confidence)
+            skipped.append(usable[k]["frame_no"])
+    ref_check = verified[0]
+
+    for k, v in verified.items():
+        if k and hamming_distance(ref_check["face_hash"], v["face_hash"]) > SAME_PERSON_HAMMING_MAX:
+            return liveness_failed_result(f"Frame {usable[k]['frame_no']} shows a different face from frame 0", face_detected=True, confidence = ref["confidence"], challenge_completed = False)
+
+    real = [v["real_probability"] for v in verified.values()]
+    passive_score = min(ref_check["real_probability"], float(np.median(real)))
+
+    liveness_score = round(passive_score if challenge_ok else min(passive_score, CHALLENGE_FAILED_SCORE_CAP), 2)
+    liveness_passed = challenge_ok and passive_score >= LIVENESS_THRESHOLD
+    ref_mesh = ref["mesh"]
+
+    frame_info = {}
+    if is_challenge:
+        frame_info = {
+            "frames_received" : len(frames_b64),
+            "frames_used" : len(usable),
+            "frames_skipped" : sorted(set(skipped)),
+            "key_frames" : [usable[v]["frame_no"] for v in verified]
+        }
+    return{
+        "liveness_passed" : liveness_passed,
+        "liveness_score" : liveness_score,
+        "face_embedding_hash" : ref_check["face_hash"],
+        "details" : {
+            "face_detected" : True,
+            "face_detection_confidence" : ref["confidence"],
+            "quality_score" : ref["quality_score"],
+            "image_quality" : image_quality_label(ref["quality_score"]),
+            "face_mesh_complete" : ref_mesh["face_mesh_complete"],
+            "landmark_count" : ref_mesh["landmark_count"],
+            "depth_detected" : ref_mesh["depth_quality"] != "poor",
+            "depth_quality" : ref_mesh["depth_quality"],
+            "nose_tip_z" : ref_mesh["nose_tip_z"],
+            "eye_aspect_ratio" : ref_mesh["eye_aspect_ratio"],
+            "head_yaw_deg" : ref_mesh["head_yaw_deg"],
+            "texture_analysis_score" : round(passive_score, 2),
+            "spoof_probability" : round(1.0 - passive_score, 2),
+            "frame_real_probability" : [round(r,2) for r in real],
+            **frame_info,
+            **challenge,
+            "spoof_suspected" : passive_score < LIVENESS_THRESHOLD,
+            "model" : LIVENESS_MODEL,
+            "threshold" : LIVENESS_THRESHOLD
+        }
+    }
 
 
 def detect_vpn_proxy(ip_address: str, user_agent: str) -> tuple:
