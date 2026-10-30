@@ -93,7 +93,7 @@ services:
       dockerfile: Dockerfile
     container_name: saiv-face-recognition
     ports:
-      - "8001:8001"
+      - "127.0.0.1:8001:8001"
     environment:
       REDIS_URL: redis://redis:6379
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
