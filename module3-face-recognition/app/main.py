@@ -116,7 +116,8 @@ LIVENESS_RESULTS = Counter("face_liveness_total", "Liveness outcomes", ["challen
 RISK_LEVELS = Counter("face_risk_assess_total", "Risk assessment by level", ["level"])
 RISK_SCORE = Histogram("face_risk_score", "Distribution of risk scores", buckets =(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0))
 
-
+torch.set_num_threads(1)
+cv2.setNumThreads(0)
 
 # =============================================================================
 #ANTI-SPOOF MODEL LOADING ON APP STARTUP
@@ -228,7 +229,7 @@ from fastapi.responses import Response
 # DEBUG: HTTP REQUEST/RESPONSE LOGGING
 # =============================================================================
 
-DEBUG_HTTP = True                                  # set False to switch off
+DEBUG_HTTP = False                                  # set False to switch off
 REDACT_KEYS = {"image", "challenge_response"}      # base64 image fields
 MAX_STR_LEN = 120                                  # shorten any other long strings
 
