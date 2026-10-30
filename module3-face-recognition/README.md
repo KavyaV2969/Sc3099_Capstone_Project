@@ -48,7 +48,7 @@ All images are **base64-encoded strings**, either plain base64 or the bytes of a
 - **`blink` / `head_turn`** with **2+ usable frames** use **multi-frame mode**: the service looks for the actual movement across the sequence.
 - **`blink` / `head_turn`** with **only 1 usable frame**, whether one image was sent or the other frames were unusable, use **single-frame mode**: that one frame is checked with fixed thresholds (see below).
 
-The frontend currently captures about 24 frames over about 5 seconds (~5 fps).
+
 
 ### How the result is decided
 
