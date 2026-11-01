@@ -59,7 +59,8 @@ with tab_list:
         pick = st.selectbox("User", list(label_to_user.keys()), key="user_manage_pick")
         user = label_to_user[pick]
 
-        m1, m2, m3 = st.columns(3)
+        # Align the buttons with the selectbox instead of its label.
+        m1, m2, m3 = st.columns(3, vertical_alignment="bottom")
         with m1:
             if user.get("is_active"):
                 if st.button("🚫 Deactivate", use_container_width=True):
@@ -75,7 +76,7 @@ with tab_list:
             new_role = st.selectbox(
                 "Change role", ["student", "ta", "instructor", "admin"],
                 index=["student", "ta", "instructor", "admin"].index(user.get("role", "student")),
-                key="user_role_change",
+                key=f"user_role_change_{user['id']}",
             )
         with m3:
             if st.button("Save role", use_container_width=True):

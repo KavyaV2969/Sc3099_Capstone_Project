@@ -174,7 +174,7 @@ def test_infra_mounts_preserved():
 
 def test_no_unsupported_audit_summary_or_direct_db_paths():
     module = APP.parent
-    content = "\n".join(f.read_text() for f in (APP / "pages").glob("*.py"))
+    content = "\n".join(f.read_text(encoding="utf-8") for f in (APP / "pages").glob("*.py"))
     assert '"/audit/summary"' not in content
     assert "import db" not in content
     assert not (APP / "db.py").exists()
