@@ -6,6 +6,7 @@ an installed Streamlit wheel. It is not a substitute for an actual AppTest.
 import runpy
 import sys
 import types
+from datetime import time
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -68,6 +69,9 @@ class FakeStreamlit(types.ModuleType):
         return [Widget(self) for _ in titles]
 
     def form(self, *a, **kw):
+        return Widget(self)
+
+    def container(self, *a, **kw):
         return Widget(self)
 
     def expander(self, *a, **kw):
@@ -202,7 +206,7 @@ def test_create_session_action_uses_singapore_offset(monkeypatch):
     client = make_client(nonempty=True, role="instructor")
     client.post.return_value = {"name": "Practice Lab", "status": "scheduled"}
     monkeypatch.setattr(auth, "get_client", lambda: client)
-    fake.form_submit_button = lambda label, **kw: label == "Create session"
+    fake.button = lambda label, **kw: label == "Create session"
     previous_text = fake.text_input
     fake.text_input = lambda label, **kw: "Practice Lab" if label == "Session name" else previous_text(label, **kw)
     runpy.run_path(str(APP_DIR / "pages/2_Sessions.py"))
@@ -210,6 +214,77 @@ def test_create_session_action_uses_singapore_offset(monkeypatch):
     assert args == ("/sessions/",)
     assert kwargs["json"]["scheduled_start"].endswith("+08:00")
     assert kwargs["json"]["scheduled_end"].endswith("+08:00")
+    assert kwargs["json"]["require_face_match"] is True
+
+
+def test_override_inputs_are_reactive_and_send_sgt_datetime(monkeypatch):
+    fake = FakeStreamlit({"role": "instructor", "id": "i1", "email": "i@example.edu"})
+    monkeypatch.setitem(sys.modules, "streamlit", fake)
+    sys.path.insert(0, str(APP_DIR))
+    for name in ("auth", "api_client", "utils"):
+        sys.modules.pop(name, None)
+    import auth
+    client = make_client(nonempty=True, role="instructor")
+    client.post.return_value = {"name": "Practice Lab", "status": "scheduled"}
+    monkeypatch.setattr(auth, "get_client", lambda: client)
+    original_checkbox = fake.checkbox
+    fake.checkbox = lambda label, **kw: True if label.startswith("Override check-in window") else original_checkbox(label, **kw)
+    original_text = fake.text_input
+    fake.text_input = lambda label, **kw: "Practice Lab" if label == "Session name" else original_text(label, **kw)
+    fake.button = lambda label, **kw: label == "Create session"
+
+    runpy.run_path(str(APP_DIR / "pages/2_Sessions.py"))
+    payload = client.post.call_args.kwargs["json"]
+    assert payload["checkin_opens_at"].endswith("+08:00")
+    assert payload["checkin_closes_at"].endswith("+08:00")
+    assert payload["require_face_match"] is True
+
+
+def test_invalid_override_window_does_not_post(monkeypatch):
+    fake = FakeStreamlit({"role": "instructor", "id": "i1", "email": "i@example.edu"})
+    monkeypatch.setitem(sys.modules, "streamlit", fake)
+    sys.path.insert(0, str(APP_DIR))
+    for name in ("auth", "api_client", "utils"):
+        sys.modules.pop(name, None)
+    import auth
+    client = make_client(nonempty=True, role="instructor")
+    monkeypatch.setattr(auth, "get_client", lambda: client)
+    fake.checkbox = lambda label, **kw: label.startswith("Override check-in window")
+    fake.text_input = lambda label, **kw: "Practice Lab" if label == "Session name" else ""
+    fake.button = lambda label, **kw: label == "Create session"
+    # Put both override clocks at noon on the same date.
+    fake.time_input = lambda label, **kw: kw["value"] if label.startswith("Scheduled") else time(12, 0)
+    fake.date_input = lambda label, **kw: kw["value"] if label.startswith("Scheduled") else __import__("datetime").date(2026, 11, 1)
+    runpy.run_path(str(APP_DIR / "pages/2_Sessions.py"))
+    client.post.assert_not_called()
+    assert any("closing time must be after" in error for error in fake.errors)
+
+
+def test_course_map_click_updates_coordinates_before_post(monkeypatch):
+    fake = FakeStreamlit({"role": "admin", "id": "a1", "email": "a@example.edu"})
+    monkeypatch.setitem(sys.modules, "streamlit", fake)
+    sys.path.insert(0, str(APP_DIR))
+    for name in ("auth", "api_client", "utils"):
+        sys.modules.pop(name, None)
+    import auth
+    monkeypatch.setattr(auth, "get_client", lambda: make_client(nonempty=True, role="admin"))
+    fake.checkbox = lambda label, **kw: label.startswith("🗺️")
+    class MapStub:
+        def __init__(self, **kwargs):
+            pass
+    class MarkerStub:
+        def __init__(self, *args, **kwargs):
+            pass
+        def add_to(self, map_obj):
+            return self
+    monkeypatch.setitem(sys.modules, "folium", types.SimpleNamespace(Map=MapStub, Marker=MarkerStub))
+    monkeypatch.setitem(sys.modules, "streamlit_folium", types.SimpleNamespace(
+        st_folium=lambda *a, **kw: {"last_clicked": {"lat": 1.35467, "lng": 103.68123}}
+    ))
+    with pytest.raises(RuntimeError, match="rerun"):
+        runpy.run_path(str(APP_DIR / "pages/6_Courses.py"))
+    assert fake.session_state["course_venue_lat"] == 1.35467
+    assert fake.session_state["course_venue_lng"] == 103.68123
 
 
 def test_approve_flagged_queue_requires_review_notes(monkeypatch):

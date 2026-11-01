@@ -1,5 +1,7 @@
 import sys
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 APP_DIR = Path(__file__).resolve().parent.parent
 if str(APP_DIR) not in sys.path:
@@ -11,6 +13,7 @@ import streamlit as st
 
 from auth import require_role, sidebar_user_box, current_role, get_client
 from api_client import safe_call
+from form_helpers import clicked_coordinates, current_semester, semester_options
 from utils import safe_items, download_csv_button, pick
 
 st.set_page_config(page_title="Courses · SAIV Dashboard", page_icon="🎓", layout="wide")
@@ -43,22 +46,57 @@ with tab_create:
             "Only administrators can create or edit courses in the current backend."
         )
     else:
-        with st.form("create_course_form"):
+        # The map sends clicks to Python immediately, so this creation section
+        # must not be enclosed in a form (which batches widget updates).
+        with st.container(border=True):
             c1, c2 = st.columns(2)
             code = c1.text_input("Course code", placeholder="CS6101")
             name = c2.text_input("Course name", placeholder="Advanced Topics in CS")
-            semester = st.text_input("Semester", placeholder="AY2025-26 Sem 2")
+            today_sgt = datetime.now(ZoneInfo("Asia/Singapore")).date()
+            available_semesters = semester_options(today_sgt)
+            semester_choice = st.selectbox("Semester", available_semesters + ["Other / custom semester"],
+                                           index=available_semesters.index(current_semester(today_sgt)))
+            semester = (st.text_input("Custom semester", max_chars=20, placeholder="AY2025-26 ST 1")
+                        if semester_choice == "Other / custom semester" else semester_choice)
 
-            c3, c4, c5 = st.columns(3)
-            venue_name = c3.text_input("Venue name", placeholder="LT1")
-            venue_lat = c4.number_input("Venue latitude", value=1.3483, format="%.6f")
-            venue_lng = c5.number_input("Venue longitude", value=103.6831, format="%.6f")
+            venue_name = st.text_input("Venue name", placeholder="LT1")
+            if "course_venue_lat" not in st.session_state:
+                st.session_state["course_venue_lat"] = 1.348300  # NTU default
+            if "course_venue_lng" not in st.session_state:
+                st.session_state["course_venue_lng"] = 103.683100
+
+            if st.checkbox("🗺️ Choose venue on an interactive map", key="course_pick_map"):
+                st.caption("Click the map to place the venue pin. The coordinates below will update automatically.")
+                try:
+                    import folium
+                    from streamlit_folium import st_folium
+                except ImportError:
+                    st.warning("Map dependencies are unavailable. Install the Module 4 requirements, or enter coordinates below.")
+                else:
+                    position = (st.session_state["course_venue_lat"], st.session_state["course_venue_lng"])
+                    map_view = folium.Map(location=position, zoom_start=16, control_scale=True)
+                    folium.Marker(position, tooltip="Selected venue").add_to(map_view)
+                    map_data = st_folium(
+                        map_view, height=360, use_container_width=True,
+                        returned_objects=["last_clicked"], key="course_venue_map",
+                    )
+                    selected = clicked_coordinates(map_data)
+                    if selected is not None and selected != st.session_state.get("course_last_map_click"):
+                        st.session_state["course_last_map_click"] = selected
+                        st.session_state["course_venue_lat"], st.session_state["course_venue_lng"] = selected
+                        st.rerun()  # Refresh the pin after the new selection.
+
+            c3, c4 = st.columns(2)
+            venue_lat = c3.number_input("Venue latitude", min_value=-90.0, max_value=90.0,
+                                        format="%.6f", key="course_venue_lat")
+            venue_lng = c4.number_input("Venue longitude", min_value=-180.0, max_value=180.0,
+                                        format="%.6f", key="course_venue_lng")
 
             c6, c7 = st.columns(2)
             radius = c6.number_input("Geofence radius (m)", min_value=10.0, value=100.0, step=10.0)
             risk_threshold = c7.slider("Default risk threshold", 0.0, 1.0, 0.5, 0.05)
 
-            submitted = st.form_submit_button("Create course", type="primary", use_container_width=True)
+            submitted = st.button("Create course", type="primary", use_container_width=True)
 
         if submitted:
             if not code.strip() or not name.strip() or not semester.strip():

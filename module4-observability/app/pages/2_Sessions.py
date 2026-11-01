@@ -1,5 +1,5 @@
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from pathlib import Path
 
@@ -13,6 +13,7 @@ import streamlit as st
 
 from auth import require_role, sidebar_user_box, current_role, current_user, get_client
 from api_client import safe_call
+from form_helpers import sgt_datetime
 from utils import (
     fmt_dt, risk_badge, status_badge, safe_items, safe_total,
     pagination_controls, download_csv_button, pick,
@@ -92,7 +93,9 @@ with tab_create:
             st.warning("No courses found yet — create a course first on the **Courses** page.")
         else:
             course_lookup = {f"{c['code']} — {c['name']}": c["id"] for c in courses}
-            with st.form("create_session_form"):
+            # Use reactive widgets: st.form would defer changes to the override
+            # checkbox until submission, leaving its inputs disabled.
+            with st.container(border=True):
                 course_label = st.selectbox("Course", list(course_lookup.keys()))
                 name = st.text_input("Session name", placeholder="Lecture 5: Neural Networks")
                 session_type = st.selectbox("Type", ["lecture", "tutorial", "lab", "exam"])
@@ -115,35 +118,41 @@ with tab_create:
 
                 c5, c6, c7 = st.columns(3)
                 require_liveness = c5.checkbox("Require liveness check", value=True)
-                require_face = c6.checkbox("Require face match", value=False)
+                require_face = c6.checkbox("Require face match", value=True)
                 risk_threshold = c7.slider("Risk threshold", 0.0, 1.0, 0.5, 0.05)
 
                 override_window = st.checkbox(
                     "Override check-in window (defaults: opens 15 min before start, "
-                    "closes 30 min after start — per API-SPECIFICATION.md)"
+                    "closes 30 min after start)", key="session_override_window"
                 )
-                co1, co2 = st.columns(2)
-                checkin_opens = co1.text_input(
-                    "Check-in opens at (ISO8601, e.g. 2026-01-15T13:45:00Z)", disabled=not override_window,
-                )
-                checkin_closes = co2.text_input(
-                    "Check-in closes at (ISO8601)", disabled=not override_window,
-                )
+                if override_window:
+                    start_sgt = sgt_datetime(start_date, start_time)
+                    default_open = start_sgt - timedelta(minutes=15)
+                    default_close = start_sgt + timedelta(minutes=30)
+                    co1, co2 = st.columns(2)
+                    with co1:
+                        checkin_open_date = st.date_input("Check-in opens — date", value=default_open.date())
+                        checkin_open_time = st.time_input("Check-in opens — time", value=default_open.time())
+                    with co2:
+                        checkin_close_date = st.date_input("Check-in closes — date", value=default_close.date())
+                        checkin_close_time = st.time_input("Check-in closes — time", value=default_close.time())
 
-                submitted = st.form_submit_button("Create session", type="primary", use_container_width=True)
+                submitted = st.button("Create session", type="primary", use_container_width=True)
 
             if submitted:
-                if datetime.combine(end_date, end_time) <= datetime.combine(start_date, start_time):
+                if sgt_datetime(end_date, end_time) <= sgt_datetime(start_date, start_time):
                     st.error("Session end must be after its start.")
                 elif not name.strip():
                     st.error("Please give the session a name.")
+                elif override_window and sgt_datetime(checkin_close_date, checkin_close_time) <= sgt_datetime(checkin_open_date, checkin_open_time):
+                    st.error("Check-in closing time must be after its opening time.")
                 else:
                     payload = {
                         "course_id": course_lookup[course_label],
                         "name": name.strip(),
                         "session_type": session_type,
-                        "scheduled_start": datetime.combine(start_date, start_time, tzinfo=ZoneInfo("Asia/Singapore")).isoformat(),
-                        "scheduled_end": datetime.combine(end_date, end_time, tzinfo=ZoneInfo("Asia/Singapore")).isoformat(),
+                        "scheduled_start": sgt_datetime(start_date, start_time).isoformat(),
+                        "scheduled_end": sgt_datetime(end_date, end_time).isoformat(),
                         "geofence_radius_meters": radius,
                         "require_liveness_check": require_liveness,
                         "require_face_match": require_face,
@@ -151,10 +160,9 @@ with tab_create:
                     }
                     if venue_name.strip():
                         payload["venue_name"] = venue_name.strip()
-                    if override_window and checkin_opens.strip():
-                        payload["checkin_opens_at"] = checkin_opens.strip()
-                    if override_window and checkin_closes.strip():
-                        payload["checkin_closes_at"] = checkin_closes.strip()
+                    if override_window:
+                        payload["checkin_opens_at"] = sgt_datetime(checkin_open_date, checkin_open_time).isoformat()
+                        payload["checkin_closes_at"] = sgt_datetime(checkin_close_date, checkin_close_time).isoformat()
 
                     created = safe_call(client.post, "/sessions/", json=payload, error_prefix="Could not create session")
                     if created:

@@ -1,7 +1,5 @@
 # SC3099 Module 4 — Observability & Instructor Dashboard
 
-**Integration baseline:** 19 October 2026 repository snapshot supplied in `20261019 Codebase.zip`. The 22 September Module 4 draft was adapted to the **actual** Module 2 routers and Pydantic schemas; it was not pasted unchanged. The starter-pack docs and all five course PDFs were used as additional design constraints.
-
 ## Architectural role
 
 The staff dashboard (Streamlit, port **8501**) calls Module 2 via its authenticated `/api/v1` REST routes (backend port **8000**) and reads observability data from Prometheus (port **9090**). It must not process or store face images, calculate attendance/risk decisions itself, change database records directly, or bypass backend authorization. Backend endpoints are the source of truth.
@@ -17,6 +15,7 @@ module4-observability/
 │   ├── config.py
 │   ├── auth.py
 │   ├── api_client.py
+│   ├── form_helpers.py
 │   ├── utils.py
 │   ├── metrics.py
 │   └── pages/
@@ -30,6 +29,7 @@ module4-observability/
 │       └── 8_Admin_Users.py
 ├── tests/
 │   ├── test_dashboard_unit.py
+│   ├── test_form_helpers.py
 │   └── test_page_smoke.py
 ├── .streamlit/config.toml
 ├── .dockerignore
@@ -42,6 +42,13 @@ module4-observability/
 ```
 
 ## Key features and role permissions
+
+### Session and course creation quality-of-life controls
+
+- Session creation reacts immediately to the optional check-in window checkbox. The override uses SGT date/time pickers, validates open before close, and sends ISO 8601 timestamps with `+08:00`. When unchecked, the backend's defaults remain unchanged.
+- Face matching is enabled by default for newly created sessions; staff may still explicitly untick it.
+- New course creation offers academic-year/semester choices, a custom option, and an optional interactive venue picker. Clicks on the map update the latitude/longitude fields, which remain manually editable.
+- The Admin Users role selector and action buttons share a common bottom alignment. The role selector also has a per-user key so switching users cannot silently carry a previous user's role selection.
 
 | Feature | Admin | Instructor | TA |
 |---|:---:|:---:|:---:|
@@ -141,6 +148,7 @@ The spec examples, public tests and actual backend schemas do not always name st
 - **Can't sign in**: check `http://localhost:8000/health`, the backend account, and the Docker backend logs. Use staff account roles; student accounts are denied by the dashboard.
 - **403 on a page**: the backend is enforcing role/ownership. Do not bypass it; ensure the user is assigned to the intended course/session.
 - **422 creating a session**: use a future SGT start time, end after start, and a course with venue coordinates.
+- **Course venue map**: check “Choose venue on an interactive map”, click a point to fill latitude/longitude, then create the course. Manual coordinates remain available. Map tiles require internet access from the browser; if the map fails to load, enter coordinates instead. Install the updated `requirements.txt` (or rebuild the dashboard container) to enable the map component.
 - **No metrics**: verify Prometheus at `http://localhost:9090/targets`, check the two `/metrics` endpoints and labels with the Module 2/3 owners.
 - **Audit summary incomplete**: it is a 1,000-row sample with an explicit warning; use audit explorer filters/pagination for older events.
 - **Download disappeared**: regenerate after changing session/course/format; generated exports are cached only within the user's Streamlit session and cleared on logout.
