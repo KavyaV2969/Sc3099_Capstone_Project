@@ -92,7 +92,7 @@ def test_changes_during_verification_block_finalization(records, monkeypatch, mo
         original_seen = db.get(Device, ids["device"]).last_seen_at
         current = db.get(User, ids["user"])
 
-        async def live(image):
+        async def live(image, challenge_type="passive"):
             assert image == "private-image" and not db.in_transaction()
             with factory() as writer:
                 row = writer.get(model, ids[key])
@@ -131,7 +131,7 @@ def test_enabling_face_during_liveness_requires_retry(records, monkeypatch):
     with factory() as writer:
         writer.get(Session, ids["session"]).require_face_match = False
         writer.commit()
-    async def live(image):
+    async def live(image, challenge_type="passive"):
         with factory() as writer:
             writer.get(Session, ids["session"]).require_face_match = True
             writer.commit()
@@ -149,7 +149,7 @@ def test_enabling_face_during_liveness_requires_retry(records, monkeypatch):
                                                  ({"geofence_radius_meters": .1}, "approved", .2125)])
 def test_finalization_uses_current_scoring_settings(records, monkeypatch, changes, status, score):
     factory, ids, payload, request = records
-    async def live(image):
+    async def live(image, challenge_type="passive"):
         with factory() as writer:
             row = writer.get(Session, ids["session"])
             for field, value in changes.items():
@@ -168,7 +168,7 @@ def test_finalization_uses_current_scoring_settings(records, monkeypatch, change
 def test_simultaneous_checkins_have_one_row_and_one_counter_increment(records, monkeypatch):
     factory, ids, payload, request = records
     barrier = Barrier(2, timeout=10)
-    async def live(image):
+    async def live(image, challenge_type="passive"):
         barrier.wait()
         return LivenessResult(liveness_passed=True, liveness_score=.8, liveness_threshold=.6)
     async def face(reference, image):
@@ -216,7 +216,7 @@ def test_evaluated_optional_liveness_policy_change_requires_retry(records, monke
     with factory() as writer:
         writer.get(Session, ids["session"]).require_face_match = False
         writer.commit()
-    async def live(image):
+    async def live(image, challenge_type="passive"):
         with factory() as writer:
             row = writer.get(User, ids["user"]) if field == "camera_consent" else writer.get(Session, ids["session"])
             setattr(row, field, value); writer.commit()

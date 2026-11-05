@@ -7,10 +7,9 @@ cleanup and Prometheus metrics. See the
 [completion contract](../docs/BACKEND-COMPLETION.md) and
 [implementation report](../output/backend-completion-2026-09-29.md).
 
-Backend implementation is complete for the agreed scope. Real biometric
-integration remains blocked: the supplied Module 3 operations return 501 and
-a functioning external implementation is required. Required face matching and evaluated biometric checks are
-preserved; successful mocks do not certify real face-service interoperability.
+Required face matching and evaluated biometric checks are preserved. Module 3
+supports single-image and multi-frame liveness; backend HTTP-contract tests do
+not certify real camera/model accuracy or inference latency.
 
 ## Run and configure
 
@@ -83,6 +82,77 @@ from or extends the school documents, the reason is recorded in
 - **Errors** are `{"detail", "code"}`; unknown request fields are ignored; names reject
   HTML markup and prose is stored escaped.
 
+## Multi-frame liveness
+
+`POST /api/v1/checkins/` and `POST /api/v1/devices/{device_id}/challenge`
+accept the existing check-in fields plus:
+
+```json
+{
+  "liveness_challenge_response": ["<base64 frame 0>", "<base64 frame 1>"],
+  "challenge_type": "blink"
+}
+```
+
+- `liveness_challenge_response` remains optional and accepts the existing single
+  image string, or **1–30 nonblank image strings in capture order**. Empty lists,
+  lists over 30 frames, invalid frame types and oversize frames return 422 before
+  calling Module 3. The existing decoded-image limit is 10 MiB per frame; the
+  entire JSON request still must fit within **16 MiB** (otherwise 413).
+- `challenge_type` accepts `passive`, `blink`, or `head_turn`, defaulting to
+  `passive` for old clients. Invalid values return 422.
+- The backend forwards the whole sequence and challenge type to Module 3's
+  `/liveness/check`. Face matching sends only frame 0 to `/face/verify`.
+  Passive liveness uses only frame 0 in Module 3.
+- Recommended frontend capture: **blink at 8 fps for 3 seconds (24 frames)**;
+  **head turn at 5 fps for 5 seconds (25 frames)**. Capture consecutive frames
+  through the action, without exceeding 30; the backend cannot infer fps or
+  duration from base64 images. Compress/resize frames to fit the total body limit.
+- Request device proof using the same sequence and challenge type as the final
+  check-in. The signature binds every frame, their order and the challenge type;
+  default passive proofs retain the existing payload hash.
+- A Module 3 HTTP 200 may report `liveness_passed: false`; this still rejects the
+  attendance attempt. Raw frames are neither stored nor logged. Existing camera
+  consent, face enrollment, session policy and risk rules still apply.
+
+The existing `FACE_SERVICE_TIMEOUT_SECONDS` setting defaults to 5 seconds.
+Measure multi-frame inference on the target hardware and configure this timeout
+if necessary; valid frame counts do not guarantee inference finishes in 5 seconds.
+
+## Automatic SC3099 database population
+
+From the repository root:
+
+```powershell
+docker compose up -d --build
+```
+
+Docker automatically populates PostgreSQL when the backend starts, after the
+existing migration service completes. No separate population command or database
+import is needed. This creates `SC3099 - Capstone Project`, a demo
+admin, instructor and student (`demo.admin@example.com`,
+`demo.instructor@example.com`, `demo.student@example.com`), the student's
+enrollment, an active lecture today and a scheduled lab tomorrow. The course
+venue is NTU (1.3483, 103.6831) with a 100 m geofence. The lecture's check-in window
+opens immediately and lasts about 3 hours. Dates use Singapore calendar days.
+
+A random initial password is printed in the backend's Docker logs for newly
+created accounts only. Set `SAIV_DEMO_PASSWORD` in the backend container's
+environment to choose one instead (the
+existing registration password rules apply). Existing passwords, consent,
+enrollments and sessions are preserved. Once SC3099 exists, subsequent startups
+skip population entirely: they never reopen sessions, reset passwords or insert
+additional daily sessions. A pre-existing SC3099 course is also left untouched,
+including its name, ownership and active status. On a database without SC3099,
+a conflicting demo account aborts the transaction without partial changes.
+Population uses existing tables and audit helpers; no schema migration or volume
+reset is needed. Each teammate gets these records in their own PostgreSQL volume.
+
+Both session types require face matching and liveness. Sign in as the demo
+student, grant camera consent, enroll a real face and register a device through
+the normal app flow. The seed never fabricates biometric hashes, consent or
+verified attendance.
+
 ## Verification
 
 From `module2-backend`, use the repository Python 3.11 virtual environment and
@@ -96,7 +166,10 @@ data and remain ignored. Disable the cleanup worker during the test process.
 ..\.venv\Scripts\python.exe -m pytest tests -q
 ```
 
-Latest results (13 October 2026): 426 backend tests passed including PostgreSQL;
-school public suite 77/77 backend points; 100 concurrent students checked in with
-p95 latency under 1.4 s.
+Latest results (6 November 2026): all 476 backend tests passed, including
+PostgreSQL and verified legacy-backup recovery. Public tests passed 81 backend
+checks (77/77 points; one explicitly skipped concurrency test) and 15 face-service
+checks. All 42 dashboard tests and the frontend production build also passed.
+The production Module 2 client was checked against Module 3 with 24-frame blink
+and 25-frame head-turn requests; static sequences correctly failed both challenges.
 Required face checks must not be disabled to claim real biometric interoperability.

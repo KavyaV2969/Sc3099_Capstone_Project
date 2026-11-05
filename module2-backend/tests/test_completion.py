@@ -116,7 +116,7 @@ def test_slow_dependencies_do_not_block_unrelated_requests(api, ready, monkeypat
     else:
         with api.database() as db:
             db.get(AttendanceSession,ready["id"]).require_liveness_check=True; db.commit()
-        async def slow_live(_):
+        async def slow_live(_, challenge_type="passive"):
             entered.set()
             while not release.is_set(): await asyncio.sleep(.01)
             return LivenessResult(liveness_passed=True,liveness_score=.9,liveness_threshold=.6)

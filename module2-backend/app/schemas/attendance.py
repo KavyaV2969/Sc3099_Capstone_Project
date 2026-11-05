@@ -1,7 +1,7 @@
 """Session, check-in, and device schemas."""
 
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, UUID4, field_validator, model_validator
 
@@ -95,7 +95,13 @@ class CheckinCreate(MutationModel):
     longitude: Longitude
     location_accuracy_meters: float | None = Field(default=None, ge=0, allow_inf_nan=False)
     device_fingerprint: str = Field(min_length=1, max_length=64)
-    liveness_challenge_response: str | None = Field(default=None, max_length=14_000_000)
+    liveness_challenge_response: (
+        Annotated[str, Field(max_length=14_000_000)]
+        | Annotated[list[Annotated[str, Field(min_length=1, max_length=14_000_000)]],
+                    Field(min_length=1, max_length=30)]
+        | None
+    ) = None
+    challenge_type: Literal["passive", "blink", "head_turn"] = "passive"
     # Accepted for client compatibility; no session requires QR (qr_code_enabled is false).
     qr_code: str | None = Field(default=None, max_length=2000, exclude=True)
     device_challenge_id: UUID4 | None = None
@@ -104,6 +110,12 @@ class CheckinCreate(MutationModel):
     @field_validator("liveness_challenge_response")
     @classmethod
     def image_size(cls, value):
+        if isinstance(value, list):
+            for frame in value:
+                if not frame.strip():
+                    raise ValueError("challenge frames must not be blank")
+                bounded_image(frame)
+            return value
         return bounded_image(value)
 
 

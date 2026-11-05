@@ -147,5 +147,5 @@ async def verify_face(reference_template_hash: str, image: str) -> VerificationR
     return await _post("/face/verify", {"image": image, "reference_template_hash": reference_template_hash}, VerificationResult)
 
 
-async def check_liveness(image: str) -> LivenessResult:
-    return await _post("/liveness/check", {"challenge_response": image, "challenge_type": "passive"}, LivenessResult)
+async def check_liveness(image: str | list[str], challenge_type: str = "passive") -> LivenessResult:
+    return await _post("/liveness/check", {"challenge_response": image, "challenge_type": challenge_type}, LivenessResult)

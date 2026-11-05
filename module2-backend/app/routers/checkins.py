@@ -61,14 +61,13 @@ def _validate_eligibility(database: Session, session: AttendanceSession, user: U
         raise HTTPException(status_code=403, detail="camera consent is required")
     if session.require_face_match and not (user.face_enrolled and user.face_embedding_hash):
         raise HTTPException(status_code=400, detail="face enrollment is required")
-    if session.require_face_match and not (
-        payload.liveness_challenge_response and payload.liveness_challenge_response.strip()
-    ):
+    images = payload.liveness_challenge_response
+    has_image = bool(images and (isinstance(images, list) or images.strip()))
+    if session.require_face_match and not has_image:
         raise HTTPException(status_code=400, detail="face image is required")
     if not is_in_singapore(payload.latitude, payload.longitude):
         raise HTTPException(status_code=403, detail="check-ins must be within Singapore")
-    return bool(session.require_liveness_check and user.camera_consent
-                and payload.liveness_challenge_response and payload.liveness_challenge_response.strip())
+    return bool(session.require_liveness_check and user.camera_consent and has_image)
 
 
 @dataclass(frozen=True)
@@ -85,10 +84,11 @@ class VerificationPolicy:
 async def _biometrics(policy: VerificationPolicy, payload: CheckinCreate) -> tuple:
     live_passed = live_score = face_passed = face_score = None
     if policy.require_liveness:
-        result = await check_liveness(payload.liveness_challenge_response)
+        result = await check_liveness(payload.liveness_challenge_response, payload.challenge_type)
         live_passed, live_score = result.liveness_passed, result.liveness_score
     if policy.require_face:
-        result = await verify_face(policy.reference_hash, payload.liveness_challenge_response)
+        images = payload.liveness_challenge_response
+        result = await verify_face(policy.reference_hash, images[0] if isinstance(images, list) else images)
         face_passed, face_score = result.match_passed, result.match_score
     return live_passed, live_score, face_passed, face_score
 

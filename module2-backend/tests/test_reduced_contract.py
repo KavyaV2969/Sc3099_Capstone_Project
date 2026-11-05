@@ -42,7 +42,7 @@ def test_optional_liveness_only_evaluates_usable_consented_evidence(api, ready, 
     from app.face_service import LivenessResult
     from app.routers import checkins
     calls = []
-    async def verify(value):
+    async def verify(value, challenge_type="passive"):
         calls.append(value)
         return LivenessResult(liveness_passed=True, liveness_score=.8, liveness_threshold=.6)
     monkeypatch.setattr(checkins, "check_liveness", verify)

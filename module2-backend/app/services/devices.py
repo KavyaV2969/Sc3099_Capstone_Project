@@ -33,6 +33,9 @@ def canonical_key(value: str) -> str:
 
 def payload_digest(payload) -> str:
     data = payload.model_dump(mode="json", exclude={"device_challenge_id", "device_signature"})
+    # Keep pre-existing passive device challenges valid during deployment.
+    if data["challenge_type"] == "passive":
+        data.pop("challenge_type")
     return sha256(json.dumps(data, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
