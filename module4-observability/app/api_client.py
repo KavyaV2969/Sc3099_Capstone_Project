@@ -11,6 +11,8 @@ from __future__ import annotations
 import streamlit as st
 import requests
 
+import session_store
+
 from config import API_BASE, REQUEST_TIMEOUT
 
 
@@ -86,7 +88,10 @@ class APIClient:
     def clear_tokens(self) -> None:
         self.access_token = None
         self.refresh_token = None
-        for key in ("access_token", "refresh_token", "user",
+        session_store.drop(st.session_state.get("sid"))
+        if st.session_state.get("sid"):
+            st.session_state["cookie_action"] = ("clear", None)
+        for key in ("access_token", "refresh_token", "user", "sid",
                     "pending_export", "session_export_ready", "course_export_ready"):
             st.session_state.pop(key, None)
 
@@ -113,6 +118,7 @@ class APIClient:
         self.refresh_token = data.get("refresh_token", self.refresh_token)
         st.session_state.access_token = self.access_token
         st.session_state.refresh_token = self.refresh_token
+        session_store.update(st.session_state.get("sid"), self.refresh_token)
         return True
 
     def _headers(self) -> dict:
@@ -198,6 +204,28 @@ def safe_call(fn, *args, error_prefix: str = "Request failed", **kwargs):
     except APIError as exc:
         st.error(f"{error_prefix}: {exc}")
         return None
+
+
+def fetch_all(client: "APIClient", path: str, params: dict | None = None, *,
+              page_size: int = 100, cap: int = 2000, error_prefix: str = "Request failed"):
+    items: list = []
+    total = None
+    offset = 0
+    while len(items) < cap:
+        payload = safe_call(client.get, path, params={**(params or {}), "limit": page_size, "offset": offset},
+                            error_prefix=error_prefix)
+        if payload is None:
+            return (None, None) if not items else (items, total)
+        if isinstance(payload, dict):
+            batch = payload.get("items", [])
+            total = payload.get("total", total)
+        else:
+            batch = payload or []
+        items.extend(batch)
+        offset += page_size
+        if len(batch) < page_size or (total is not None and len(items) >= total):
+            break
+    return items, (total if total is not None else len(items))
 
 
 def safe_delete(client: APIClient, path: str, *, error_prefix: str = "Could not delete") -> bool:

@@ -8,9 +8,10 @@ if str(APP_DIR) not in sys.path:
 import pandas as pd
 import streamlit as st
 
-from auth import require_role, sidebar_user_box, get_client
+from auth import require_role, sidebar_user_box, get_client, current_user
 from api_client import safe_call
-from utils import fmt_dt, safe_items, safe_total, pagination_controls, download_csv_button
+from utils import (fmt_dt, safe_items, safe_total, pagination_controls, download_csv_button,
+                   flash, show_flash, reset_offset_on_change)
 
 st.set_page_config(page_title="Admin · Users · SAIV Dashboard", page_icon="🛠️", layout="wide")
 require_role("admin")
@@ -31,6 +32,7 @@ with tab_list:
     search = c3.text_input("Search name/email", key="user_search_f")
     limit = c4.selectbox("Page size", [25, 50, 100], index=0, key="user_limit_f")
 
+    reset_offset_on_change("users_offset", (role_f, active_f, search.strip(), limit))
     params = {"limit": limit, "offset": st.session_state.users_offset}
     if role_f != "(any)":
         params["role"] = role_f
@@ -55,22 +57,30 @@ with tab_list:
 
         st.divider()
         st.markdown("#### Manage a user")
-        label_to_user = {f"{u.get('full_name')} ({u.get('email')}) — {u.get('role')}": u for u in items}
-        pick = st.selectbox("User", list(label_to_user.keys()), key="user_manage_pick")
-        user = label_to_user[pick]
+        id_to_user = {u["id"]: u for u in items}
+        pick = st.selectbox(
+            "User", list(id_to_user.keys()),
+            format_func=lambda uid: f"{id_to_user[uid].get('full_name')} ({id_to_user[uid].get('email')})",
+            key="user_manage_pick",
+        )
+        user = id_to_user[pick]
+        is_self = bool(user.get("id")) and user.get("id") == current_user().get("id")
+        if is_self:
+            st.caption("This is your own account: it cannot be deactivated or have its role changed here, "
+                       "so an administrator can never lock themselves out.")
 
         # Align the buttons with the selectbox instead of its label.
         m1, m2, m3 = st.columns(3, vertical_alignment="bottom")
         with m1:
             if user.get("is_active"):
-                if st.button("🚫 Deactivate", use_container_width=True):
+                if st.button("🚫 Deactivate", use_container_width=True, disabled=is_self):
                     if safe_call(client.patch, f"/admin/users/{user['id']}/deactivate", error_prefix="Could not deactivate"):
-                        st.warning("User deactivated.")
+                        flash("User deactivated.", "warning")
                         st.rerun()
             else:
                 if st.button("✅ Activate", use_container_width=True):
                     if safe_call(client.patch, f"/admin/users/{user['id']}/activate", error_prefix="Could not activate"):
-                        st.success("User activated.")
+                        flash("User activated.", "success")
                         st.rerun()
         with m2:
             new_role = st.selectbox(
@@ -79,9 +89,9 @@ with tab_list:
                 key=f"user_role_change_{user['id']}",
             )
         with m3:
-            if st.button("Save role", use_container_width=True):
+            if st.button("Save role", use_container_width=True, disabled=is_self):
                 if safe_call(client.patch, f"/users/{user['id']}", json={"role": new_role}, error_prefix="Could not update role"):
-                    st.success("Role updated.")
+                    flash("Role updated.", "success")
                     st.rerun()
     else:
         st.caption("No users match these filters.")
@@ -105,3 +115,5 @@ with tab_new:
             created = safe_call(client.post, "/auth/register", json=payload, error_prefix="Could not create account")
             if created:
                 st.success(f"Account created for {created.get('email')}.")
+
+show_flash()

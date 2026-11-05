@@ -10,7 +10,7 @@ import streamlit as st
 
 from auth import require_role, sidebar_user_box, get_client, current_role
 from api_client import safe_call, safe_delete
-from utils import safe_items, download_csv_button, pick, fmt_dt
+from utils import safe_items, download_csv_button, pick, fmt_dt, flash, show_flash
 
 st.set_page_config(page_title="Enrollments · SAIV Dashboard", page_icon="👥", layout="wide")
 require_role("instructor", "ta", "admin")
@@ -48,10 +48,11 @@ if students:
     label_to_enrollment = {f"{row.get('student_name')} ({row.get('student_email')})": row for row in students}
     if current_role() in ("instructor", "admin"):
         remove_pick = st.selectbox("Student to remove", list(label_to_enrollment), key="remove_pick")
-        if st.button("Remove from course", type="secondary"):
+        confirm_remove = st.checkbox("I confirm this student should be removed from the course", key="confirm_remove")
+        if st.button("Remove from course", type="secondary", disabled=not confirm_remove):
             enrollment = label_to_enrollment[remove_pick]
             if safe_delete(client, f"/enrollments/{enrollment['id']}", error_prefix="Could not remove enrollment"):
-                st.success("Student removed.")
+                flash("Student removed.", "success")
                 st.rerun()
 
     st.markdown("#### Individual student attendance")
@@ -67,16 +68,25 @@ if students:
         if student_stats:
             sc1, sc2, sc3, sc4 = st.columns(4)
             course_stats = student_stats.get("courses") or []
-            sc1.metric("Enrolled courses", len(course_stats))
-            sc2.metric("Sessions attended", sum(item.get("sessions_attended", 0) for item in course_stats))
-            sc3.metric("Sessions scheduled", sum(item.get("total_sessions", 0) for item in course_stats))
-            sc4.metric("Average risk", "—" if not course_stats else f"{sum(item.get('average_risk_score', 0) for item in course_stats)/len(course_stats):.2f}")
+            enrolled_courses = pick(student_stats, "total_enrolled_courses", default=len(course_stats))
+            attended = pick(student_stats, "attended_sessions",
+                            default=sum(item.get("sessions_attended", 0) for item in course_stats))
+            scheduled = pick(student_stats, "total_sessions",
+                             default=sum(item.get("total_sessions", 0) for item in course_stats))
+            sc1.metric("Enrolled courses", enrolled_courses)
+            sc2.metric("Sessions attended", attended)
+            sc3.metric("Sessions scheduled", scheduled)
+            avg_risk = pick(student_stats, "average_risk_score")
+            if avg_risk is None and course_stats:
+                avg_risk = sum(item.get("average_risk_score", 0) for item in course_stats) / len(course_stats)
+            sc4.metric("Average risk", f"{avg_risk:.2f}" if avg_risk is not None else "—")
 
-            recent = student_stats.get("recent_checkins") or []
+            recent = student_stats.get("recent_checkins") or student_stats.get("recent_sessions") or []
             if recent:
                 df_recent = pd.DataFrame(recent)
-                if "date" in df_recent.columns:
-                    df_recent["date"] = df_recent["date"].apply(fmt_dt)
+                for column in ("checked_in_at", "date"):
+                    if column in df_recent.columns:
+                        df_recent[column] = df_recent[column].apply(fmt_dt)
                 st.dataframe(df_recent, use_container_width=True, hide_index=True)
 else:
     st.caption("No students enrolled in this course yet.")
@@ -99,7 +109,7 @@ with add_tab:
         else:
             payload = {"student_id": student_id.strip(), "course_id": course["id"]}
             if safe_call(client.post, "/enrollments/", json=payload, error_prefix="Could not enroll student"):
-                st.success("Student enrolled.")
+                flash("Student enrolled.", "success")
                 st.rerun()
 
 with bulk_tab:
@@ -130,3 +140,5 @@ with bulk_tab:
                 if details:
                     st.dataframe(pd.DataFrame(details), use_container_width=True, hide_index=True)
     
+
+show_flash()

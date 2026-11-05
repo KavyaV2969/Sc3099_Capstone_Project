@@ -10,9 +10,13 @@ import plotly.express as px
 import streamlit as st
 
 from auth import require_role, sidebar_user_box, current_role, get_client
-from api_client import safe_call
-from utils import risk_badge, status_badge, fmt_dt, safe_items, pick
-from config import AUTO_REFRESH_MS
+from api_client import safe_call, fetch_all
+from alerts import render_flagged_alert, render_failed_login_alert
+from utils import (
+    risk_badge, status_badge, fmt_dt, safe_items, safe_total, pick, sgt_day_bounds,
+    checkins_by_hour, status_counts, signal_columns,
+)
+from config import AUTO_REFRESH_MS, STATUS_COLORS
 
 st.set_page_config(page_title="Overview · SAIV Dashboard", page_icon="📊", layout="wide")
 require_role("instructor", "ta", "admin")
@@ -47,20 +51,37 @@ else:
         "**Sessions** to view attendance for the sessions you help run."
     )
 
+today_items = []
 if overview:
+    today_start, today_end = sgt_day_bounds()
+    today_items, _ = fetch_all(
+        client, "/checkins/",
+        params={"start_date": today_start.isoformat(), "end_date": today_end.isoformat()},
+        cap=2000, error_prefix="Could not load today's check-ins",
+    )
+    today_items = today_items or []
+    sessions_today = safe_call(
+        client.get, "/sessions/",
+        params={"start_date": today_start.isoformat(), "end_date": today_end.isoformat(), "limit": 1},
+        error_prefix="Could not load today's sessions",
+    )
+
     row1 = st.columns(4)
-    row1[0].metric("Total sessions", pick(overview, "total_sessions", default="—"))
-    row1[1].metric("Active sessions", pick(overview, "active_sessions", default="—"))
-    row1[2].metric("Check-ins (7d)", pick(overview, "total_checkins_week", default="—"))
-    row1[3].metric("Avg attendance", f"{overview['average_attendance_rate'] * 100:.1f}%" if overview.get("average_attendance_rate") is not None else "—")
+    row1[0].metric("Sessions today", safe_total(sessions_today, fallback=0) if sessions_today is not None else "—")
+    checkins_today = pick(overview, "today_checkins", "total_checkins_today")
+    row1[1].metric("Check-ins today", checkins_today if checkins_today is not None else "—")
+    flagged = pick(overview, "flagged_pending", "flagged_pending_review")
+    row1[2].metric("Flagged, pending review", flagged if flagged is not None else "—")
+    approval_rate = pick(overview, "approval_rate")
+    row1[3].metric("Approval rate", f"{approval_rate * 100:.1f}%" if approval_rate is not None else "—")
 
     row2 = st.columns(4)
-    checkins_today = pick(overview, "today_checkins", "total_checkins_today")
-    row2[0].metric("Check-ins today", checkins_today if checkins_today is not None else "—")
-    approval_rate = pick(overview, "approval_rate")
-    row2[1].metric("Approval rate", f"{approval_rate * 100:.1f}%" if approval_rate is not None else "—")
-    flagged = pick(overview, "flagged_pending", "flagged_pending_review")
-    row2[2].metric("Flagged, pending review", flagged if flagged is not None else "—")
+    active = pick(overview, "active_sessions", default="—")
+    total_sessions = pick(overview, "total_sessions", default="—")
+    row2[0].metric("Active / total sessions", f"{active} / {total_sessions}")
+    row2[1].metric("Check-ins (7d)", pick(overview, "total_checkins_week", default="—"))
+    avg_attendance = pick(overview, "average_attendance_rate")
+    row2[2].metric("Avg attendance", f"{avg_attendance * 100:.1f}%" if avg_attendance is not None else "—")
     avg_risk = pick(overview, "average_risk_score")
     row2[3].metric(
         "Avg risk score",
@@ -68,20 +89,12 @@ if overview:
         help="0 = low risk, 1 = high risk",
     )
 
-    # These extra fields appear in some backends' richer implementations but
-    # aren't required by tests/public/test_observability.py - shown only if present.
-    checkins_week = pick(overview, "total_checkins_week")
-    avg_attendance = pick(overview, "average_attendance_rate")
-    if checkins_week is not None or avg_attendance is not None:
-        row3 = st.columns(4)
-        if checkins_week is not None:
-            row3[0].metric("Check-ins (7d, confirmed)", checkins_week)
-        if avg_attendance is not None:
-            row3[1].metric("Average attendance rate", f"{avg_attendance * 100:.1f}%")
-
     high_risk_today = pick(overview, "high_risk_checkins_today")
     if high_risk_today:
         st.warning(f"⚠️ {high_risk_today} high-risk check-in(s) today — worth a look in the flagged queue.")
+    render_flagged_alert(today_items)
+    if current_role() == "admin":
+        render_failed_login_alert(client)
 
     st.divider()
 
@@ -106,6 +119,22 @@ if overview:
     else:
         tcol2.caption("No daily attendance-rate trend data returned by the backend yet.")
 
+    hcol1, hcol2 = st.columns(2)
+    if today_items:
+        hourly = checkins_by_hour(today_items)
+        fig = px.bar(hourly, x="label", y="count", title="Check-ins by hour (today, SGT)",
+                     labels={"label": "Hour", "count": "Check-ins"})
+        fig.update_yaxes(rangemode="tozero")
+        hcol1.plotly_chart(fig, use_container_width=True)
+        fig = px.pie(status_counts(today_items), names="status", values="count", hole=0.45,
+                     title="Verification status (today)", color="status", color_discrete_map=STATUS_COLORS)
+        fig.update_traces(textinfo="percent", textposition="inside")
+        fig.update_layout(legend=dict(orientation="h", y=-0.1))
+        hcol2.plotly_chart(fig, use_container_width=True)
+    else:
+        hcol1.caption("No check-ins recorded today yet, so the hourly chart is empty.")
+        hcol2.caption("No check-ins recorded today yet, so there is no verification status mix.")
+
 st.divider()
 
 # --------------------------------------------------------------------- #
@@ -126,9 +155,10 @@ if items:
     df = pd.DataFrame(items)
     display_cols = [c for c in [
         "checked_in_at", "student_name", "student_email", "session_name",
-        "status", "risk_score", "distance_from_venue_meters", "liveness_passed",
+        "status", "risk_score", "distance_from_venue_meters", "liveness_passed", "liveness_score",
+        "face_match_passed", "face_match_score", "device_trusted",
     ] if c in df.columns]
-    view = df[display_cols].copy()
+    view = signal_columns(df[display_cols])
     if "checked_in_at" in view:
         view["checked_in_at"] = view["checked_in_at"].apply(fmt_dt)
     if "status" in view:
@@ -136,11 +166,5 @@ if items:
     if "risk_score" in view:
         view["risk_score"] = view["risk_score"].apply(risk_badge)
     st.dataframe(view, use_container_width=True, hide_index=True)
-
-    if "status" in df.columns:
-        counts = df["status"].value_counts().reset_index()
-        counts.columns = ["status", "count"]
-        fig = px.pie(counts, names="status", values="count", hole=0.45, title="Status mix (most recent 25)")
-        st.plotly_chart(fig, use_container_width=True)
 else:
     st.caption("No check-ins recorded yet.")

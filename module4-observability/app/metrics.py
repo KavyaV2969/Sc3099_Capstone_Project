@@ -8,12 +8,15 @@ comment block in config.py if a panel here shows "no data".
 """
 from __future__ import annotations
 
+import math
+
 import requests
 
 from config import (
     PROMETHEUS_URL,
     METRIC_HTTP_DURATION_BUCKET,
     METRIC_HTTP_REQUESTS_TOTAL,
+    METRIC_HTTP_DURATION_COUNT,
     METRIC_CHECKIN_ATTEMPTS_TOTAL,
     METRIC_CHECKIN_SUCCESS_TOTAL,
 )
@@ -50,9 +53,10 @@ def query_range(promql: str, start: float, end: float, step: str = "30s") -> dic
 def _scalar(promql: str) -> float | None:
     data = query_prometheus(promql)
     try:
-        return float(data["data"]["result"][0]["value"][1])
+        value = float(data["data"]["result"][0]["value"][1])
     except (TypeError, KeyError, IndexError, ValueError):
         return None
+    return None if math.isnan(value) or math.isinf(value) else value
 
 
 def prometheus_reachable() -> bool:
@@ -82,16 +86,26 @@ def get_latency_p95_ms(job: str) -> float | None:
     return v * 1000 if v is not None else None
 
 
+def _request_counters(job: str):
+    return (METRIC_HTTP_REQUESTS_TOTAL, METRIC_HTTP_DURATION_COUNT)
+
+
 def get_request_rate(job: str) -> float | None:
-    return _scalar(f'sum(rate({METRIC_HTTP_REQUESTS_TOTAL}{{job="{job}"}}[5m]))')
+    for metric in _request_counters(job):
+        value = _scalar(f'sum(rate({metric}{{job="{job}"}}[5m]))')
+        if value is not None:
+            return value
+    return None
 
 
 def get_error_rate_pct(job: str) -> float | None:
-    total = _scalar(f'sum(rate({METRIC_HTTP_REQUESTS_TOTAL}{{job="{job}"}}[5m]))')
-    if not total:
-        return None
-    err = _scalar(f'sum(rate({METRIC_HTTP_REQUESTS_TOTAL}{{job="{job}", status=~"5.."}}[5m])) OR on() vector(0)')
-    return (err or 0.0) / total * 100
+    for metric in _request_counters(job):
+        total = _scalar(f'sum(rate({metric}{{job="{job}"}}[5m]))')
+        if not total:
+            continue
+        err = _scalar(f'sum(rate({metric}{{job="{job}", status=~"5.."}}[5m])) or on() vector(0)')
+        return (err or 0.0) / total * 100
+    return None
 
 
 def get_checkin_success_rate_pct() -> float | None:
@@ -108,13 +122,13 @@ def get_request_rate_series(job: str, minutes: int = 30):
 
     end = time.time()
     start = end - minutes * 60
-    data = query_range(
-        f'sum(rate({METRIC_HTTP_REQUESTS_TOTAL}{{job="{job}"}}[5m]))', start, end, "30s"
-    )
-    try:
-        values = data["data"]["result"][0]["values"]
-    except (TypeError, KeyError, IndexError):
-        return [], []
-    ts = [v[0] for v in values]
-    ys = [float(v[1]) for v in values]
-    return ts, ys
+    for metric in _request_counters(job):
+        data = query_range(f'sum(rate({metric}{{job="{job}"}}[5m]))', start, end, "30s")
+        try:
+            values = data["data"]["result"][0]["values"]
+        except (TypeError, KeyError, IndexError):
+            continue
+        ts = [v[0] for v in values]
+        ys = [0.0 if math.isnan(float(v[1])) else float(v[1]) for v in values]
+        return ts, ys
+    return [], []

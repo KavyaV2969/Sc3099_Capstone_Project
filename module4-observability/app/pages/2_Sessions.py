@@ -12,12 +12,15 @@ import plotly.express as px
 import streamlit as st
 
 from auth import require_role, sidebar_user_box, current_role, current_user, get_client
-from api_client import safe_call
+from api_client import safe_call, fetch_all
 from form_helpers import sgt_datetime
 from utils import (
-    fmt_dt, risk_badge, status_badge, safe_items, safe_total,
+    fmt_dt, fmt_dt_short, risk_badge, status_badge, safe_items, safe_total,
     pagination_controls, download_csv_button, pick,
+    has_value, render_risk_factors, flash, show_flash, reset_offset_on_change, signal_columns,
 )
+from export_pdf import attendance_pdf
+from config import STATUS_COLORS, RISK_COLORS
 
 st.set_page_config(page_title="Sessions · SAIV Dashboard", page_icon="🗓️", layout="wide")
 require_role("instructor", "ta", "admin")
@@ -43,6 +46,7 @@ with tab_list:
         course_filter = c2.text_input("Course ID (uuid, optional)", key="sess_course_f")
         limit = c3.selectbox("Page size", [10, 25, 50, 100], index=1, key="sess_limit_f")
 
+    reset_offset_on_change("sessions_offset", (status_filter, course_filter.strip(), limit))
     params = {"limit": limit, "offset": st.session_state.sessions_offset}
     if status_filter != "(any)":
         params["status"] = status_filter
@@ -100,8 +104,11 @@ with tab_create:
                 name = st.text_input("Session name", placeholder="Lecture 5: Neural Networks")
                 session_type = st.selectbox("Type", ["lecture", "tutorial", "lab", "exam"])
 
-                now = datetime.now(ZoneInfo("Asia/Singapore"))
-                default_start = (now + timedelta(days=1)).replace(second=0, microsecond=0)
+                if "sess_default_start" not in st.session_state:
+                    st.session_state["sess_default_start"] = (
+                        datetime.now(ZoneInfo("Asia/Singapore")) + timedelta(days=1)
+                    ).replace(second=0, microsecond=0)
+                default_start = st.session_state["sess_default_start"]
                 default_end = default_start + timedelta(hours=1)
                 st.caption("All dates and times entered below use Singapore Time (SGT, UTC+08:00).")
                 c1, c2 = st.columns(2)
@@ -115,6 +122,13 @@ with tab_create:
                 selected_course = next(c for c in courses if c["id"] == course_lookup[course_label])
                 radius = c4.number_input("Geofence radius (meters)", min_value=1.0,
                                           value=float(selected_course.get("geofence_radius_meters") or 100.0), step=10.0)
+                override_venue = st.checkbox("Use a different venue location for this session", key="session_override_venue")
+                if override_venue:
+                    c_lat, c_lng = st.columns(2)
+                    venue_lat = c_lat.number_input("Venue latitude", min_value=-90.0, max_value=90.0, format="%.6f",
+                                                   value=float(selected_course.get("venue_latitude") or 1.3483))
+                    venue_lng = c_lng.number_input("Venue longitude", min_value=-180.0, max_value=180.0, format="%.6f",
+                                                   value=float(selected_course.get("venue_longitude") or 103.6831))
 
                 c5, c6, c7 = st.columns(3)
                 require_liveness = c5.checkbox("Require liveness check", value=True)
@@ -160,6 +174,9 @@ with tab_create:
                     }
                     if venue_name.strip():
                         payload["venue_name"] = venue_name.strip()
+                    if override_venue:
+                        payload["venue_latitude"] = venue_lat
+                        payload["venue_longitude"] = venue_lng
                     if override_window:
                         payload["checkin_opens_at"] = sgt_datetime(checkin_open_date, checkin_open_time).isoformat()
                         payload["checkin_closes_at"] = sgt_datetime(checkin_close_date, checkin_close_time).isoformat()
@@ -167,6 +184,7 @@ with tab_create:
                     created = safe_call(client.post, "/sessions/", json=payload, error_prefix="Could not create session")
                     if created:
                         st.success(f"Session '{created.get('name')}' created with status `{created.get('status')}`.")
+                        st.session_state.pop("sess_default_start", None)
 
 # ======================================================================= #
 # Tab 3 - drill into one session: stats, status control, check-ins, review
@@ -181,11 +199,13 @@ with tab_detail:
     if not all_sessions:
         st.caption("No sessions available yet.")
     else:
-        label_to_id = {
-            f"{s.get('course_code', '?')} — {s.get('name')} ({s.get('status')})": s["id"] for s in all_sessions
+        id_to_label = {
+            s["id"]: f"{s.get('course_code', '?')} — {s.get('name')} · {fmt_dt_short(s.get('scheduled_start'))}"
+            for s in all_sessions
         }
-        chosen_label = st.selectbox("Select a session", list(label_to_id.keys()), key="sess_detail_pick")
-        session_id = label_to_id[chosen_label]
+        session_id = st.selectbox(
+            "Select a session", list(id_to_label.keys()), format_func=id_to_label.get, key="sess_detail_pick"
+        )
 
         detail = safe_call(client.get, f"/sessions/{session_id}", error_prefix="Could not load session detail")
 
@@ -193,8 +213,8 @@ with tab_detail:
             info_cols = st.columns(4)
             info_cols[0].metric("Status", detail.get("status", "—"))
             info_cols[1].metric("Type", detail.get("session_type", "—"))
-            info_cols[2].metric("Check-in opens", fmt_dt(detail.get("checkin_opens_at")))
-            info_cols[3].metric("Check-in closes", fmt_dt(detail.get("checkin_closes_at")))
+            info_cols[2].metric("Check-in opens (SGT)", fmt_dt_short(detail.get("checkin_opens_at")))
+            info_cols[3].metric("Check-in closes (SGT)", fmt_dt_short(detail.get("checkin_closes_at")))
 
             if current_role() in ("instructor", "admin"):
                 st.markdown("**Session controls**")
@@ -202,21 +222,21 @@ with tab_detail:
                 status = detail.get("status")
                 if b1.button("▶ Activate", disabled=status != "scheduled", use_container_width=True):
                     if safe_call(client.patch, f"/sessions/{session_id}", json={"status": "active"}):
-                        st.success("Session activated. Students can check in during the configured window.")
+                        flash("Session activated. Students can check in during the configured window.", "success")
                         st.rerun()
                 if b2.button("⏹ Close", disabled=status != "active", use_container_width=True):
                     if safe_call(client.patch, f"/sessions/{session_id}", json={"status": "closed"}):
-                        st.success("Session closed.")
+                        flash("Session closed.", "success")
                         st.rerun()
                 if b3.button("🚫 Cancel", disabled=status in ("closed", "cancelled"), use_container_width=True):
                     if safe_call(client.patch, f"/sessions/{session_id}", json={"status": "cancelled"}):
-                        st.warning("Session cancelled.")
+                        flash("Session cancelled.", "warning")
                         st.rerun()
                 with b4.popover("✏️ Rename"):
                     new_name = st.text_input("New name", value=detail.get("name", ""), key="rename_input")
                     if st.button("Save", key="rename_save"):
                         if safe_call(client.patch, f"/sessions/{session_id}", json={"name": new_name}):
-                            st.success("Renamed.")
+                            flash("Renamed.", "success")
                             st.rerun()
 
             st.divider()
@@ -263,12 +283,17 @@ with tab_detail:
                 cc1, cc2, cc3 = st.columns(3)
                 if by_status:
                     df_status = pd.DataFrame({"status": list(by_status.keys()), "count": list(by_status.values())})
-                    fig = px.pie(df_status, names="status", values="count", title="By status", hole=0.4)
+                    fig = px.pie(df_status, names="status", values="count", title="By status", hole=0.4,
+                                 color="status", color_discrete_map=STATUS_COLORS)
+                    fig.update_traces(textinfo="percent", textposition="inside")
+                    fig.update_layout(legend=dict(orientation="h", y=-0.1))
                     cc1.plotly_chart(fig, use_container_width=True)
                 if risk_dist:
                     df_risk = pd.DataFrame({"level": list(risk_dist.keys()), "count": list(risk_dist.values())})
                     fig = px.bar(df_risk, x="level", y="count", title="Risk distribution",
-                                 category_orders={"level": ["low", "medium", "high"]})
+                                 category_orders={"level": ["low", "medium", "high", "critical"]},
+                                 color="level", color_discrete_map=RISK_COLORS)
+                    fig.update_layout(showlegend=False)
                     fig.update_yaxes(rangemode="tozero")
                     cc2.plotly_chart(fig, use_container_width=True)
                 if timeline:
@@ -282,18 +307,19 @@ with tab_detail:
 
             # ---- Check-ins for this session + review ----
             st.subheader("Check-ins for this session")
-            checkins = safe_call(
-                client.get, f"/checkins/session/{session_id}", error_prefix="Could not load session check-ins"
+            checkins, _ = fetch_all(
+                client, f"/checkins/session/{session_id}", error_prefix="Could not load session check-ins"
             )
-            checkins = safe_items(checkins) if isinstance(checkins, dict) else (checkins or [])
+            checkins = checkins or []
 
             if checkins:
                 df = pd.DataFrame(checkins)
                 show_cols = [c for c in [
                     "student_name", "student_email", "status", "checked_in_at",
-                    "distance_from_venue_meters", "risk_score", "liveness_passed", "device_trusted",
+                    "distance_from_venue_meters", "risk_score", "liveness_passed", "liveness_score",
+                    "face_match_passed", "face_match_score", "device_trusted",
                 ] if c in df.columns]
-                view = df[show_cols].copy()
+                view = signal_columns(df[show_cols])
                 if "checked_in_at" in view:
                     view["checked_in_at"] = view["checked_in_at"].apply(fmt_dt)
                 if "status" in view:
@@ -304,22 +330,32 @@ with tab_detail:
 
                 export_c1, export_c2, export_c3 = st.columns([1, 1, 1])
                 with export_c1:
-                    download_csv_button(df, f"session_{session_id}_checkins.csv", key="session_checkins_csv")
+                    download_csv_button(df, f"session_{session_id}_checkins.csv", key="session_checkins_csv",
+                                        signals_option=True)
                 with export_c2:
                     export_fmt = st.radio(
-                        "Official export format", ["csv", "json"], horizontal=True, key="session_export_fmt"
+                        "Official export format", ["csv", "json", "pdf"], horizontal=True, key="session_export_fmt"
                     )
                 with export_c3:
                     if current_role() == "ta":
                         st.caption("Official gradebook exports require instructor/admin access.")
                     elif st.button("Generate official export", key="session_export_btn", use_container_width=True):
                         resp = safe_call(
-                            client.get_raw, f"/export/session/{session_id}", params={"format": export_fmt},
+                            client.get_raw, f"/export/session/{session_id}",
+                            params={"format": "json" if export_fmt == "pdf" else export_fmt},
                             error_prefix="Server-side export failed",
                         )
                         if resp is not None:
+                            payload_bytes = resp.content
+                            if export_fmt == "pdf":
+                                report = resp.json()
+                                payload_bytes = attendance_pdf(
+                                    f"Attendance report: {detail.get('name', 'session')}",
+                                    report.get("records", []), report.get("summary"),
+                                    current_user().get("full_name", ""),
+                                )
                             st.session_state["session_export_ready"] = {
-                                "session_id": session_id, "format": export_fmt, "bytes": resp.content
+                                "session_id": session_id, "format": export_fmt, "bytes": payload_bytes
                             }
                     prepared = st.session_state.get("session_export_ready")
                     if (current_role() in ("instructor", "admin") and prepared
@@ -328,7 +364,7 @@ with tab_detail:
                             f"⬇ Download official {export_fmt.upper()} export",
                             data=prepared["bytes"],
                             file_name=f"session_{session_id}_export.{export_fmt}",
-                            mime="text/csv" if export_fmt == "csv" else "application/json",
+                            mime={"csv": "text/csv", "json": "application/json", "pdf": "application/pdf"}[export_fmt],
                             use_container_width=True, key="official_export_dl",
                         )
 
@@ -338,8 +374,8 @@ with tab_detail:
                     for _, row in needs_review.iterrows():
                         with st.expander(f"{row.get('student_name', row.get('student_id'))} — risk {row.get('risk_score')}"):
                             st.write(f"Status: {row.get('status')} · Checked in: {fmt_dt(row.get('checked_in_at'))}")
-                            if row.get("risk_factors"):
-                                st.json(row["risk_factors"])
+                            if has_value(row.get("risk_factors")):
+                                render_risk_factors(row["risk_factors"])
                             notes = st.text_area("Review notes", key=f"notes_{row.get('id')}")
                             ra, rb = st.columns(2)
                             if ra.button("✅ Approve", key=f"approve_{row.get('id')}", use_container_width=True):
@@ -349,7 +385,7 @@ with tab_detail:
                                     client.post, f"/checkins/{row['id']}/review",
                                     json={"status": "approved", "review_notes": notes},
                                 ):
-                                    st.success("Approved.")
+                                    flash("Approved.", "success")
                                     st.rerun()
                             if rb.button("⛔ Reject", key=f"reject_{row.get('id')}", use_container_width=True):
                                 if not notes.strip():
@@ -358,7 +394,9 @@ with tab_detail:
                                     client.post, f"/checkins/{row['id']}/review",
                                     json={"status": "rejected", "review_notes": notes},
                                 ):
-                                    st.warning("Rejected.")
+                                    flash("Rejected.", "warning")
                                     st.rerun()
             else:
                 st.caption("No check-ins recorded for this session yet.")
+
+show_flash()
