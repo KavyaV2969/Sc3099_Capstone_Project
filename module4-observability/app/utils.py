@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 import io
-from datetime import datetime, timezone
+import math
+from datetime import datetime, time, timezone
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -23,6 +24,66 @@ def fmt_dt(value) -> str:
         return dt.astimezone(ZoneInfo("Asia/Singapore")).strftime("%d %b %Y, %H:%M SGT")
     except (ValueError, TypeError):
         return str(value)
+
+
+def fmt_dt_short(value) -> str:
+    if not value:
+        return "—"
+    try:
+        dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(ZoneInfo("Asia/Singapore")).strftime("%d %b %H:%M")
+    except (ValueError, TypeError):
+        return str(value)
+
+
+def has_value(value) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, float) and math.isnan(value):
+        return False
+    if isinstance(value, (str, list, tuple, dict, set)) and len(value) == 0:
+        return False
+    return True
+
+
+def risk_factors_df(factors) -> pd.DataFrame:
+    if isinstance(factors, dict):
+        factors = [{"category": k, "weight": v} if not isinstance(v, dict) else {"category": k, **v}
+                   for k, v in factors.items()]
+    if not isinstance(factors, list) or not factors:
+        return pd.DataFrame()
+    df = pd.DataFrame([f for f in factors if isinstance(f, dict)])
+    wanted = [c for c in ("category", "type", "severity", "weight", "risk") if c in df.columns]
+    df = df[wanted] if wanted else df
+    return df.rename(columns={"weight": "contribution to score", "risk": "signal risk"})
+
+
+def render_risk_factors(factors) -> None:
+    df = risk_factors_df(factors)
+    if df.empty:
+        st.caption("No risk factors recorded.")
+        return
+    st.caption("Risk factors (contributions add up to the risk score)")
+    st.dataframe(df, use_container_width=True, hide_index=True)
+
+
+def flash(message: str, kind: str = "success") -> None:
+    st.session_state.setdefault("_flash", []).append((kind, message))
+
+
+def show_flash() -> None:
+    icons = {"success": "✅", "info": "ℹ️", "warning": "⚠️", "error": "🚫"}
+    for kind, message in st.session_state.pop("_flash", []):
+        st.toast(message, icon=icons.get(kind, "ℹ️"))
+
+
+def reset_offset_on_change(offset_key: str, signature, name: str = "filters") -> None:
+    sig_key = f"{offset_key}__{name}"
+    if st.session_state.get(sig_key) != signature:
+        st.session_state[sig_key] = signature
+        st.session_state[offset_key] = 0
 
 
 def risk_level(score) -> str:
@@ -69,10 +130,16 @@ PREVIEW_EXPORT_COLUMNS = (
     "resource_id", "timestamp", "success", "severity",
 )
 
+SIGNAL_EXPORT_COLUMNS = (
+    "liveness_score", "face_match_score", "liveness_passed", "face_match_passed",
+    "device_trusted", "distance_from_venue_meters", "latitude", "longitude",
+)
 
-def df_to_csv_bytes(df: pd.DataFrame) -> bytes:
+
+def df_to_csv_bytes(df: pd.DataFrame, include_signals: bool = False) -> bytes:
     """Excel-safe UTF-8 CSV for *current-page* data (not an official export)."""
-    preview = df.loc[:, [c for c in PREVIEW_EXPORT_COLUMNS if c in df.columns]].copy()
+    allowed = PREVIEW_EXPORT_COLUMNS + (SIGNAL_EXPORT_COLUMNS if include_signals else ())
+    preview = df.loc[:, [c for c in allowed if c in df.columns]].copy()
     # CSV escaping handles commas and quotes, not spreadsheet formulas. Escape
     # cells starting with spreadsheet formula prefixes, including leading spaces.
     def safe_cell(value):
@@ -85,14 +152,20 @@ def df_to_csv_bytes(df: pd.DataFrame) -> bytes:
     return ("\ufeff" + buf.getvalue()).encode("utf-8")
 
 
-def download_csv_button(df: pd.DataFrame, filename: str, label: str = "⬇ Download CSV", key: str | None = None):
+def download_csv_button(df: pd.DataFrame, filename: str, label: str = "⬇ Download CSV", key: str | None = None,
+                        signals_option: bool = False):
     if df is None or df.empty:
         st.caption("Nothing to export yet.")
         return
     st.caption("Preview CSV: only currently loaded rows; use the official export for a complete gradebook.")
+    include_signals = False
+    if signals_option and any(c in df.columns for c in SIGNAL_EXPORT_COLUMNS):
+        include_signals = st.checkbox(
+            "Include GPS coordinates and liveness / face-match scores (sensitive)", key=f"{key}_signals"
+        )
     st.download_button(
         label,
-        data=df_to_csv_bytes(df),
+        data=df_to_csv_bytes(df, include_signals),
         file_name=filename,
         mime="text/csv",
         key=key,
@@ -163,3 +236,37 @@ def pick(d: dict, *keys, default=None):
         if key in d and d[key] is not None:
             return d[key]
     return default
+
+
+SGT = ZoneInfo("Asia/Singapore")
+
+
+def sgt_day_bounds(day=None):
+    day = day or datetime.now(SGT).date()
+    return datetime.combine(day, time.min, tzinfo=SGT), datetime.combine(day, time.max, tzinfo=SGT)
+
+
+def checkins_by_hour(items) -> pd.DataFrame:
+    hours = pd.DataFrame({"hour": range(24), "count": 0})
+    if not items:
+        hours["label"] = hours["hour"].map(lambda h: f"{h:02d}:00")
+        return hours
+    stamps = pd.to_datetime(pd.Series([i.get("checked_in_at") for i in items]), utc=True, errors="coerce").dropna()
+    counts = stamps.dt.tz_convert(SGT).dt.hour.value_counts()
+    hours["count"] = hours["hour"].map(counts).fillna(0).astype(int)
+    hours["label"] = hours["hour"].map(lambda h: f"{h:02d}:00")
+    return hours
+
+
+def status_counts(items) -> pd.DataFrame:
+    counts = pd.Series([i.get("status", "unknown") for i in items], dtype="object").value_counts()
+    return counts.rename_axis("status").reset_index(name="count")
+
+
+def signal_columns(df: pd.DataFrame) -> pd.DataFrame:
+    view = df.copy()
+    for column in ("liveness_score", "face_match_score", "distance_from_venue_meters"):
+        if column in view:
+            view[column] = pd.to_numeric(view[column], errors="coerce").round(3)
+    return view
+

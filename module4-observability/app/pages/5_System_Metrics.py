@@ -6,6 +6,7 @@ if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
 
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 import plotly.express as px
@@ -14,6 +15,7 @@ import streamlit as st
 from auth import require_role, sidebar_user_box, current_role, get_client
 from api_client import safe_call
 from utils import safe_items
+from alerts import render_failed_login_alert
 from config import AUTO_REFRESH_MS, PROMETHEUS_JOBS, PROMETHEUS_URL
 import metrics as prom
 
@@ -36,6 +38,8 @@ with st.sidebar:
 
 client = get_client()
 
+render_failed_login_alert(client)
+
 # --------------------------------------------------------------------- #
 # System health
 # --------------------------------------------------------------------- #
@@ -54,6 +58,8 @@ else:
         instances = up.get(job, [])
         healthy = any(is_up for _, is_up in instances)
         health_cols[i].metric(label, "🟢 Up" if healthy else ("🔴 Down" if instances else "⚪ No data"))
+        if instances and not healthy:
+            st.error(f"🔴 {label} is down: Prometheus cannot scrape it.")
     health_cols[-1].metric("Prometheus", "🟢 Up")
 
 st.divider()
@@ -82,21 +88,24 @@ This page queries Prometheus for metrics named in
 `docs/recommended_design/INTEGRATION-GUIDE.md`:
 
 - `http_request_duration_seconds_bucket{{job="{job}"}}`
-- `http_requests_total{{job="{job}"}}`
+- `http_requests_total{{job="{job}"}}`, or else
+  `http_request_duration_seconds_count{{job="{job}"}}`
 
 If your backend teammate instruments the service with different metric
 names, update the constants at the top of `app/config.py`
-(`METRIC_HTTP_DURATION_BUCKET`, `METRIC_HTTP_REQUESTS_TOTAL`) to match —
+(`METRIC_HTTP_DURATION_BUCKET`, `METRIC_HTTP_REQUESTS_TOTAL`, `METRIC_HTTP_DURATION_COUNT`) to match —
 nothing else on this page needs to change.
             """
         )
 
 ts, ys = prom.get_request_rate_series(job, minutes=30)
 if ts:
-    df = pd.DataFrame({"time": [datetime.fromtimestamp(t) for t in ts], "requests_per_sec": ys})
+    df = pd.DataFrame({"time": [datetime.fromtimestamp(t, ZoneInfo("Asia/Singapore")) for t in ts], "requests_per_sec": ys})
     fig = px.line(df, x="time", y="requests_per_sec", title=f"Request rate — last 30 min ({job_label})")
     fig.update_yaxes(rangemode="tozero")
     st.plotly_chart(fig, use_container_width=True)
+else:
+    st.caption("No request-rate series yet; send some traffic and refresh.")
 
 st.divider()
 

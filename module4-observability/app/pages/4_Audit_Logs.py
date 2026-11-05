@@ -5,17 +5,23 @@ APP_DIR = Path(__file__).resolve().parent.parent
 if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
 
+from datetime import datetime, time
+from zoneinfo import ZoneInfo
+
 import pandas as pd
 import plotly.express as px
 import streamlit as st
 
 from auth import require_role, sidebar_user_box, get_client
-from api_client import safe_call
-from utils import fmt_dt, safe_items, safe_total, pagination_controls, download_csv_button, pick
+from api_client import safe_call, fetch_all
+from utils import fmt_dt, safe_items, safe_total, pagination_controls, download_csv_button, pick, reset_offset_on_change, df_to_csv_bytes
+from config import CHECKIN_EXPORT_CAP
 
 st.set_page_config(page_title="Audit Logs · SAIV Dashboard", page_icon="📜", layout="wide")
 require_role("admin")
 sidebar_user_box()
+
+SGT = ZoneInfo("Asia/Singapore")
 
 st.title("📜 Audit Logs")
 st.caption("Immutable security & compliance trail. Admin-only, per docs/SECURITY-REQUIREMENTS.md.")
@@ -57,6 +63,11 @@ with tab_logs:
             start_date_val = c7.date_input("Start date", key="audit_start_f")
             end_date_val = c8.date_input("End date", key="audit_end_f")
 
+    reset_offset_on_change("audit_offset", (user_id.strip(), action, resource_type, resource_id.strip(), success,
+                                            limit, use_date_range, str(start_date_val), str(end_date_val)))
+    if use_date_range and start_date_val and end_date_val and start_date_val > end_date_val:
+        st.error("The start date must not be after the end date.")
+        st.stop()
     params = {"limit": limit, "offset": st.session_state.audit_offset}
     if user_id.strip():
         params["user_id"] = user_id.strip()
@@ -67,9 +78,9 @@ with tab_logs:
     if resource_id.strip():
         params["resource_id"] = resource_id.strip()
     if use_date_range and start_date_val:
-        params["start_date"] = start_date_val.isoformat()
+        params["start_date"] = datetime.combine(start_date_val, time.min, tzinfo=SGT).isoformat()
     if use_date_range and end_date_val:
-        params["end_date"] = end_date_val.isoformat()
+        params["end_date"] = datetime.combine(end_date_val, time.max, tzinfo=SGT).isoformat()
     if success != "(any)":
         params["success"] = success == "true"
 
@@ -100,7 +111,10 @@ with tab_logs:
         view = df[cols].copy()
         if "timestamp" in view:
             view["timestamp"] = view["timestamp"].apply(fmt_dt)
-        st.dataframe(view, use_container_width=True, hide_index=True)
+        severity_colors = {"🔴 failed": "background-color: #fde0e0", "🟠 notable": "background-color: #fff0d6",
+                           "🟢 normal": "background-color: #e3f4e3"}
+        styled = view.style.map(lambda value: severity_colors.get(value, ""), subset=["severity"]) if "severity" in view else view
+        st.dataframe(styled, use_container_width=True, hide_index=True)
 
         with st.expander("Inspect raw `details` for a log entry"):
             options = {
@@ -113,6 +127,25 @@ with tab_logs:
 
         st.session_state.audit_offset = pagination_controls(total, limit, st.session_state.audit_offset, "audit")
         download_csv_button(df, "audit_logs.csv", key="audit_csv")
+        if total > len(items):
+            if st.button(f"Prepare export of all {total} matching audit entries", key="audit_full_export"):
+                everything, _ = fetch_all(client, "/audit/", params={k: v for k, v in params.items()
+                                                                    if k not in ("limit", "offset")},
+                                          page_size=1000, cap=CHECKIN_EXPORT_CAP * 2,
+                                          error_prefix="Could not prepare the audit export")
+                if everything:
+                    full = pd.DataFrame(everything)
+                    if "timestamp" not in full.columns and "created_at" in full.columns:
+                        full["timestamp"] = full["created_at"]
+                    full["severity"] = full.apply(_severity, axis=1)
+                    st.session_state["audit_full_export_bytes"] = df_to_csv_bytes(full)
+                    st.session_state["audit_full_export_rows"] = len(everything)
+            if st.session_state.get("audit_full_export_bytes"):
+                st.download_button(
+                    f"⬇ Download {st.session_state['audit_full_export_rows']} audit entries (CSV)",
+                    data=st.session_state["audit_full_export_bytes"], file_name="audit_trail.csv",
+                    mime="text/csv", key="audit_full_export_dl", use_container_width=True,
+                )
     else:
         st.caption("No audit logs match these filters.")
 

@@ -11,10 +11,11 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from auth import require_role, sidebar_user_box, current_role, get_client
+from auth import require_role, sidebar_user_box, current_role, current_user, get_client
 from api_client import safe_call
 from form_helpers import clicked_coordinates, current_semester, semester_options
 from utils import safe_items, download_csv_button, pick
+from export_pdf import attendance_pdf
 
 st.set_page_config(page_title="Courses · SAIV Dashboard", page_icon="🎓", layout="wide")
 require_role("instructor", "ta", "admin")
@@ -190,21 +191,28 @@ with tab_stats:
 
         st.divider()
         st.markdown("#### Export attendance for gradebook")
-        fmt = st.radio("Format", ["csv", "json"], horizontal=True, key="course_export_fmt")
+        fmt = st.radio("Format", ["csv", "json", "pdf"], horizontal=True, key="course_export_fmt")
         if st.button("Generate export", key="course_export_btn"):
             resp = safe_call(
-                client.get_raw, f"/export/attendance/{course_id}", params={"format": fmt},
+                client.get_raw, f"/export/attendance/{course_id}",
+                params={"format": "json" if fmt == "pdf" else fmt},
                 error_prefix="Export failed",
             )
             if resp is not None:
+                payload_bytes = resp.content
+                if fmt == "pdf":
+                    payload_bytes = attendance_pdf(
+                        f"Course attendance report: {stats_pick}", resp.json(), None,
+                        current_user().get("full_name", ""),
+                    )
                 st.session_state["course_export_ready"] = {
-                    "course_id": course_id, "format": fmt, "bytes": resp.content
+                    "course_id": course_id, "format": fmt, "bytes": payload_bytes
                 }
         prepared = st.session_state.get("course_export_ready")
         if prepared and prepared["course_id"] == course_id and prepared["format"] == fmt:
             st.download_button(
                 f"⬇ Download {fmt.upper()}", data=prepared["bytes"],
                 file_name=f"course_{course_id}_attendance.{fmt}",
-                mime="text/csv" if fmt == "csv" else "application/json",
+                mime={"csv": "text/csv", "json": "application/json", "pdf": "application/pdf"}[fmt],
                 key="course_export_dl",
             )

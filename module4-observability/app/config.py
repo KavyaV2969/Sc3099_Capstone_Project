@@ -2,7 +2,7 @@
 Central configuration for the SAIV Instructor Dashboard.
 
 Everything here is read from environment variables (with sensible local
-defaults) so the same code works both via `streamlit run app/main.py` on a
+defaults) so the same code works both via `streamlit run app/Home.py` on a
 laptop and inside the docker-compose `dashboard` service.
 """
 import os
@@ -15,7 +15,7 @@ API_BASE = f"{BACKEND_URL}/api/v1"
 
 PROMETHEUS_URL = os.getenv("PROMETHEUS_URL", "http://localhost:9090").rstrip("/")
 
-REQUEST_TIMEOUT = float(os.getenv("REQUEST_TIMEOUT_SECONDS", "10"))
+REQUEST_TIMEOUT = float(os.getenv("REQUEST_TIMEOUT_SECONDS", "30"))
 
 # How often the "live" pages auto-refresh themselves, in milliseconds.
 # 30s matches the "polling is good enough for dashboards" guidance from the
@@ -67,8 +67,22 @@ ALL_ROLES = {"student", "ta", "instructor", "admin"}
 # ---------------------------------------------------------------------------
 METRIC_HTTP_DURATION_BUCKET = "http_request_duration_seconds_bucket"
 METRIC_HTTP_REQUESTS_TOTAL = "http_requests_total"
+METRIC_HTTP_DURATION_COUNT = "http_request_duration_seconds_count"
 METRIC_CHECKIN_ATTEMPTS_TOTAL = "checkin_attempts_total"
 METRIC_CHECKIN_SUCCESS_TOTAL = "checkin_success_total"
+
+STATUS_COLORS = {
+    "approved": "#2e7d32", "pending": "#9e9e9e", "flagged": "#f9a825",
+    "appealed": "#ef6c00", "rejected": "#c62828",
+}
+RISK_COLORS = {"low": "#2e7d32", "medium": "#f9a825", "high": "#ef6c00", "critical": "#c62828"}
+
+FLAGGED_RATE_ALERT = float(os.getenv("FLAGGED_RATE_ALERT", "0.2"))
+FAILED_LOGIN_ALERT_COUNT = int(os.getenv("FAILED_LOGIN_ALERT_COUNT", "5"))
+FAILED_LOGIN_WINDOW_HOURS = int(os.getenv("FAILED_LOGIN_WINDOW_HOURS", "1"))
+SESSION_TTL_HOURS = float(os.getenv("DASHBOARD_SESSION_TTL_HOURS", "8"))
+SESSION_COOKIE = "saiv_sid"
+CHECKIN_EXPORT_CAP = int(os.getenv("CHECKIN_EXPORT_CAP", "5000"))
 
 PROMETHEUS_JOBS = {
     "Backend API": "saiv-backend",

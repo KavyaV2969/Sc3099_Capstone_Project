@@ -11,7 +11,7 @@ The app intentionally omits the old `DB Insights` optional SQL page. That page d
 ```text
 module4-observability/
 ├── app/
-│   ├── main.py
+│   ├── Home.py
 │   ├── config.py
 │   ├── auth.py
 │   ├── api_client.py
@@ -94,7 +94,7 @@ py -m venv .venv
 .\.venv\Scripts\python.exe -m pytest tests -q
 $env:BACKEND_URL = "http://localhost:8000"
 $env:PROMETHEUS_URL = "http://localhost:9090"
-.\.venv\Scripts\python.exe -m streamlit run app/main.py --server.port 8501
+.\.venv\Scripts\python.exe -m streamlit run app/Home.py --server.port 8501
 ```
 
 The `.env.example` file documents settings; plain Streamlit does **not** automatically load `.env`. Set environment variables in the shell as above. You need valid staff credentials registered with the real backend. The old demo's `dev_mock_backend` is **not** included in the submission patch, and its seeded credentials are **not** valid against this backend.
@@ -132,13 +132,13 @@ The code follows the real 19 October route definitions in `module2-backend/app/r
 - Enrollments: `GET /enrollments/course/{id}`, `POST /enrollments/`, `POST /enrollments/bulk`, `DELETE /enrollments/{id}` (mutations instructor/admin only). `create_accounts=true` is not supported by the current backend, so the dashboard does not offer it.
 - Users: `GET /users/`, `PATCH /users/{id}`, activation/deactivation via `/admin/users/{id}/activate|deactivate` (admin-only)
 
-The spec examples, public tests and actual backend schemas do not always name statistics keys identically. `utils.pick(...)` handles known equivalent fields without inventing data for unavailable keys. **Attendance success rate is not the same thing as gradebook approval rate.** CSV preview downloads contain only the rows currently loaded and are clearly marked; official server exports are the full gradebook source. Client-side preview CSVs omit raw GPS/device/risk-factor data and escape spreadsheet formula-like input.
+The spec examples, public tests and actual backend schemas do not always name statistics keys identically. `utils.pick(...)` handles known equivalent fields without inventing data for unavailable keys. **Attendance success rate is not the same thing as gradebook approval rate.** CSV preview downloads contain only the rows currently loaded and are clearly marked; official server exports are the full gradebook source. Client-side preview CSVs omit device, consent and risk-factor data and escape spreadsheet formula-like input; GPS coordinates and liveness/face-match scores are added only when the user ticks an explicit opt-in.
 
 ## Integration boundaries — what still requires teammates
 
 1. **No complete live Docker verification in this delivery environment.** Docker is unavailable here, and the environment cannot download Streamlit wheels. Validation is limited to Python compilation, YAML parsing, and the offline regression suite. The earlier agent's mock-backend run was historical, not a fresh check against the 19 October services.
-2. **Backend and face service currently lack Prometheus instrumented `/metrics` routes.** The provided Prometheus configuration scrapes `/metrics` at both services. Until those service owners expose compatible counters/histograms, service targets may show down/unavailable and latency/request-rate panels will say `no data`. The backend business stats pages still work independently.
-3. **Prometheus metric naming contract:** the dashboard expects `http_request_duration_seconds_bucket`, `http_requests_total`, `checkin_attempts_total`, `checkin_success_total` as in the integration guide. If teammates choose different names, align constants in `app/config.py` with instrumentation (and adjust `app/metrics.py` if label conventions differ).
+2. **Prometheus must scrape both services.** The backend and face service expose `/metrics`, and the provided Prometheus configuration scrapes both. If Prometheus is not running or a target is down, service health shows down and the latency/request-rate panels say `no data`. The backend business stats pages work independently.
+3. **Prometheus metric naming contract:** the dashboard expects `http_request_duration_seconds_bucket`, `checkin_attempts_total`, `checkin_success_total` and, for request and error rates, either `http_requests_total` or the `_count` series of `http_request_duration_seconds` (the Module 2 backend exposes only the latter). If teammates choose different names, align constants in `app/config.py` with instrumentation (and adjust `app/metrics.py` if label conventions differ).
 4. **Collector version compatibility:** the repository's pre-existing OpenTelemetry collector YAML uses a `logging` exporter. The Compose image uses `:latest`; the team should validate this collector/exporter combination, ideally pin versions in a coordinated infrastructure PR rather than changing them blindly inside Module 4.
 5. **Privacy:** raw face images are never read or retained by this dashboard. Official backend exports can include personal data and should be downloaded only by authorized staff, stored securely, and deleted according to your team's retention policy. The backend must escape formula-like strings in official CSV exports if they will be opened in Excel; that backend-side hardening is outside Module 4.
 6. **Permissions and sample data:** some pages require realistic courses, assigned instructors/TAs, enrolled students, and flagged check-ins. Empty states are implemented, but these workflows must be demonstrated with real populated team data.
@@ -149,6 +149,8 @@ The spec examples, public tests and actual backend schemas do not always name st
 - **403 on a page**: the backend is enforcing role/ownership. Do not bypass it; ensure the user is assigned to the intended course/session.
 - **422 creating a session**: use a future SGT start time, end after start, and a course with venue coordinates.
 - **Course venue map**: check “Choose venue on an interactive map”, click a point to fill latitude/longitude, then create the course. Manual coordinates remain available. Map tiles require internet access from the browser; if the map fails to load, enter coordinates instead. Install the updated `requirements.txt` (or rebuild the dashboard container) to enable the map component.
+- **Signed out after a restart**: the dashboard keeps browser sessions in memory behind an opaque cookie, so restarting the dashboard process signs everyone out. Refreshing the browser keeps the session.
+- **`rate limit exceeded (HTTP 429)`**: the backend allows each user 1,000 API calls per hour; wait for the window to reset.
 - **No metrics**: verify Prometheus at `http://localhost:9090/targets`, check the two `/metrics` endpoints and labels with the Module 2/3 owners.
 - **Audit summary incomplete**: it is a 1,000-row sample with an explicit warning; use audit explorer filters/pagination for older events.
 - **Download disappeared**: regenerate after changing session/course/format; generated exports are cached only within the user's Streamlit session and cleared on logout.
