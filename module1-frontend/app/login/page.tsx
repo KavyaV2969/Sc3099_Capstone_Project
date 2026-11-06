@@ -7,20 +7,27 @@ import { StorageKeys, setItem } from "@/lib/storage";
 import { Card } from "@/components/ui/Card";
 import Link from "next/link";
 
+const DASHBOARD_URL = "http://localhost:8501"; // the instructor dashboard
 export default function LoginPage() {
     const router = useRouter();
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [error, setError] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [notStudent, setNotStudent] = useState(false);
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
+        setNotStudent(false);
         setError("");
         setIsSubmitting(true);
 
         try{
             const { data } = await api.post("/auth/login", { email, password });
+            if (data.user?.role !== "student") {
+                setNotStudent(true);
+                return; // nothing is stored, so no session is created
+            }
             setItem(StorageKeys.accessToken, data.access_token);
             setItem(StorageKeys.refreshToken, data.refresh_token);
             router.push("/");   // redirect to home page after successful login
@@ -37,6 +44,13 @@ export default function LoginPage() {
             <h1 className="text-2xl font-bold mb-6">Welcome Back!</h1>
 
             {error && <div className="alert-error">{error}</div>}
+
+            {notStudent && (
+                <div className="alert-error">
+                    This app is for students only. TAs, instructors and admins, please use the{" "}
+                    <a href={DASHBOARD_URL} className="underline font-semibold">dashboard</a>.
+                </div>
+            )}
 
             <form onSubmit={handleSubmit}>
                 <div className="mb-3">
