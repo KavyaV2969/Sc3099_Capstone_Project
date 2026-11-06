@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { getLocationFix, type LocationFix } from "@/lib/geolocation";
 import { registerDevice, signCheckin } from "@/lib/device";
 import { AppShell } from "@/components/ui/layout/AppShell";
+import { captureClip, CHALLENGE_CONFIG, type ChallengeType } from "@/lib/capture";
 import type { Session } from "@/lib/types";
 
 interface CheckinResult {
@@ -21,15 +22,10 @@ function errorText(err: any, fallback: string): string {
   return typeof detail === "string" ? detail : fallback;
 }
 
-const CHALLENGES = [
-  "Blink",
-  "Turn your head slightly"
-];
 
 function CheckinContent() {
   const router = useRouter();
   const sessionId = useSearchParams().get("session");
-
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -40,8 +36,9 @@ function CheckinContent() {
   const [photo, setPhoto] = useState<string | null>(null);
   const [location, setLocation] = useState<LocationFix | null>(null);
   const [locating, setLocating] = useState(false);
-  const [challenge, setChallenge] = useState<string | null>(null);
-  const [countdown, setCountdown] = useState<number | null>(null);
+  const [challengeType, setChallengeType] = useState<ChallengeType | null>(null);
+  const [recording, setRecording] = useState<{ done: number; total: number } | null>(null);
+  const [frames, setFrames] = useState<string[] | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<CheckinResult | null>(null);
   const [error, setError] = useState("");
@@ -130,23 +127,30 @@ function CheckinContent() {
     stopCamera(); // release the camera as soon as the photo is taken
   }
 
-  function startChallenge() {
-    setChallenge(CHALLENGES[Math.floor(Math.random() * CHALLENGES.length)]);
-    setCountdown(3);
-  }
-
-  useEffect(() => {
-    if (countdown === null) return;
-    if (countdown === 0) {
-      takePhoto(); // auto-capture at the end of the countdown
-      setCountdown(null);
-      setChallenge(null);
-      return;
+  async function startChallenge() {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas) return;
+    const type: ChallengeType = Math.random() < 0.5 ? "blink" : "head_turn";
+    setChallengeType(type);
+    setError("");
+    setRecording({ done: 0, total: 0 }); // "get ready"
+    try {
+      await new Promise((r) => setTimeout(r, 1500)); // look at the camera, eyes open
+      const cfg = CHALLENGE_CONFIG[type];
+      const clip = await captureClip(video, canvas, cfg.fps, cfg.seconds, (done, total) =>
+        setRecording({ done, total })
+      );
+      setFrames(clip.map((f) => f.split(",")[1])); // raw base64, no data: prefix
+      setPhoto(clip[0]); // preview, also the face-match frame
+    } catch {
+      setError("Could not record the clip. Please try again.");
+      setChallengeType(null);
+    } finally {
+      setRecording(null);
+      stopCamera();
     }
-    const t = setTimeout(() => setCountdown(countdown - 1), 1000);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [countdown]); 
+  }
   
   useEffect(() => {
     setOnline(navigator.onLine);
@@ -199,7 +203,8 @@ function CheckinContent() {
         longitude: location.longitude,
         location_accuracy_meters: location.accuracy,
         device_fingerprint: fingerprint,
-        liveness_challenge_response: photo ? photo.split(",")[1] : undefined,
+        liveness_challenge_response: frames ?? (photo ? photo.split(",")[1] : undefined),
+        challenge_type: frames && challengeType ? challengeType : "passive",
       };
 
       let proof = null;
@@ -225,7 +230,10 @@ function CheckinContent() {
     rejected: "bg-red-100 border-red-500 text-red-700",
   };
 
-  const ready = (!needsPhoto || !!photo) && !!location;
+  const ready =
+    (!needsPhoto || !!photo) &&
+    (!session?.require_liveness_check || !!frames) &&
+    !!location;
 
   return (
     <AppShell>
@@ -283,26 +291,33 @@ function CheckinContent() {
                   )}
                   {streamActive &&
                     (session?.require_liveness_check ? (
-                      countdown === null ? (
+                      recording ? (
+                        <div className="text-center">
+                          <p className="font-semibold">
+                            {challengeType && CHALLENGE_CONFIG[challengeType].prompt}
+                          </p>
+                          <p className="text-sm text-gray-600">
+                            {recording.total === 0 ? "Get ready..." : `Recording ${recording.done}/${recording.total}`}
+                          </p>
+                        </div>
+                      ) : (
                         <button className="btn-primary" onClick={startChallenge}>
                           Start liveness check
                         </button>
-                      ) : (
-                        <div className="text-center">
-                          <p className="font-semibold">{challenge}</p>
-                          <p className="text-3xl font-bold">{countdown}</p>
-                        </div>
                       )
                     ) : (
                       <button className="btn-primary" onClick={takePhoto}>
                         Take Photo
                       </button>
                     ))}
+
                   {photo && (
                     <button
                       className="btn-secondary"
                       onClick={() => {
                         setPhoto(null);
+                        setFrames(null);
+                        setChallengeType(null);
                         startCamera();
                       }}
                     >
