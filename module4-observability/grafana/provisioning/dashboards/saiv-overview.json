@@ -1,0 +1,62 @@
+{
+  "title": "SAIV Overview",
+  "uid": "saiv-overview",
+  "schemaVersion": 39,
+  "version": 2,
+  "refresh": "10s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1, "type": "timeseries", "title": "Requests per second, by service",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "sum(rate(http_request_duration_seconds_count[1m])) by (job)", "legendFormat": "{{job}}" }]
+    },
+    {
+      "id": 2, "type": "timeseries", "title": "p95 latency (s), by service",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, job))", "legendFormat": "{{job}}" }]
+    },
+    {
+      "id": 3, "type": "stat", "title": "Check-ins in the last hour",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "sum(increase(checkin_attempts_total[1h]))", "legendFormat": "Attempts" },
+        { "refId": "B", "expr": "sum(increase(checkin_success_total[1h]))", "legendFormat": "Approved" }
+      ]
+    },
+    {
+      "id": 4, "type": "stat", "title": "Check-in outcomes (1h)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "sum(increase(checkin_outcomes_total[1h])) by (status)", "legendFormat": "{{status}}" }]
+    },
+    {
+      "id": 5, "type": "timeseries", "title": "HTTP errors per second",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "sum(rate(http_request_errors_total[5m])) by (job)", "legendFormat": "{{job}}" }]
+    },
+    {
+      "id": 6, "type": "stat", "title": "Face enrollments by result",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "sum(face_enroll_total) by (result)", "legendFormat": "{{result}}" }]
+    },
+    {
+      "id": 7, "type": "timeseries", "title": "Liveness outcomes (5 min)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "sum(increase(face_liveness_total[5m])) by (result)", "legendFormat": "{{result}}" }]
+    },
+    {
+      "id": 8, "type": "stat", "title": "Time since last retention cleanup",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [{ "refId": "A", "expr": "time() - retention_last_success_timestamp_seconds" }]
+    }
+  ]
+}
